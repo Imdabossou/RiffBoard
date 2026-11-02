@@ -121,6 +121,23 @@ def test_guard_404s_unlisted_routes_and_sets_headers(rb):
     assert "microphone=(self)" in r.headers["permissions-policy"]
 
 
+def test_settings_state_round_trip_is_stateless(rb):
+    import json as _j
+    r = rb.get("/api/settings", params={"patch": _j.dumps({"av_offset_ms": 25, "dlc_dir": "/x"})}).json()
+    assert r["av_offset_ms"] == 25 and "dlc_dir" not in r["_state"]
+    state = r["_state"]
+    # The server kept nothing: a plain GET is back to defaults...
+    assert rb.get("/api/settings").json()["av_offset_ms"] == 0
+    # ...and the browser's saved state restores the change.
+    assert rb.get("/api/settings", params={"state": _j.dumps(state)}).json()["av_offset_ms"] == 25
+    bass = rb.get("/api/settings", params={"state": _j.dumps(state),
+                                           "patch": _j.dumps({"active_instrument_profile": "bass"})}).json()
+    assert bass["instrument"] == "bass" and bass["_state"]["av_offset_ms"] == 25
+    assert rb.get("/api/settings", params={"patch": _j.dumps({"master_difficulty": "x"})}).status_code == 400
+    # A tampered saved state is dropped, not trusted.
+    assert rb.get("/api/settings", params={"state": _j.dumps({"master_difficulty": "x"})}).status_code == 200
+
+
 def test_settings_are_read_only_defaults(rb):
     s = rb.get("/api/settings").json()
     assert "dlc_dir" not in s

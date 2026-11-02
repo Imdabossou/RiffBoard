@@ -1,0 +1,171 @@
+/*
+ * RiffBoard stylesheet: colour themes + public-build UI trims.
+ *
+ * RiffBoard colour themes.
+ *
+ * Every palette colour the UI uses (Tailwind's fb-*, dark-* and gray-* scales,
+ * see tailwind.config.js) is an RGB triplet variable here, so one switch
+ * re-colours the whole app. Dark is the default; the light set applies when
+ * the system prefers light (and the visitor hasn't picked a theme) or when
+ * they choose Light in Settings → Accessibility. The choice is stored in
+ * localStorage and applied by an inline script in index.html before first
+ * paint, as data-theme on <html>.
+ *
+ * The player (#player) and anything marked .rb-on-dark always use the dark
+ * set: the highway is a dark game view, and hero banners sit on artwork.
+ */
+
+:root,
+#player,
+.rb-on-dark {
+    color-scheme: dark;
+    --fb-bg: 15 23 42;
+    --fb-sidebar: 17 24 39;
+    --fb-card: 30 41 59;
+    --fb-cardMuted: 11 18 32;
+    --fb-primary: 14 165 233;
+    --fb-primaryHi: 56 189 248;
+    --fb-accent: 239 68 68;
+    --fb-text: 248 250 252;
+    --fb-textDim: 148 163 184;
+    --fb-border: 51 65 85;
+    --fb-good: 34 197 94;
+    --fb-mid: 234 179 8;
+    --fb-low: 239 68 68;
+    --fb-gold: 232 192 64;
+    --rb-text2: 226 232 240;
+    --rb-text3: 203 213 225;
+    --rb-white: 255 255 255;
+
+    --dark-900: 5 5 8;
+    --dark-800: 10 10 18;
+    --dark-700: 16 16 30;
+    --dark-600: 24 24 48;
+    --dark-500: 30 30 58;
+
+    --gray-50: 249 250 251;
+    --gray-100: 243 244 246;
+    --gray-200: 229 231 235;
+    --gray-300: 209 213 219;
+    --gray-400: 156 163 175;
+    --gray-500: 107 114 128;
+    --gray-600: 75 85 99;
+    --gray-700: 55 65 81;
+    --gray-800: 31 41 55;
+    --gray-900: 17 24 39;
+    --gray-950: 3 7 18;
+}
+
+/* Light set. Defined once as a mixin-like block, applied two ways. */
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+        color-scheme: light;
+        --fb-bg: 241 245 249;
+        --fb-sidebar: 255 255 255;
+        --fb-card: 255 255 255;
+        --fb-cardMuted: 226 232 240;
+        --fb-primary: 2 132 199;
+        --fb-primaryHi: 3 105 161;
+        --fb-accent: 220 38 38;
+        --fb-text: 15 23 42;
+        --fb-textDim: 71 85 105;
+        --fb-border: 203 213 225;
+        --fb-good: 22 163 74;
+        --fb-mid: 161 98 7;
+        --fb-low: 220 38 38;
+        --fb-gold: 161 98 7;
+        --rb-text2: 30 41 59;
+        --rb-text3: 51 65 85;
+        --rb-white: 15 23 42;
+        --dark-900: 248 250 252;
+        --dark-800: 241 245 249;
+        --dark-700: 255 255 255;
+        --dark-600: 226 232 240;
+        --dark-500: 203 213 225;
+        --gray-50: 3 7 18;
+        --gray-100: 17 24 39;
+        --gray-200: 31 41 55;
+        --gray-300: 55 65 81;
+        --gray-400: 75 85 99;
+        --gray-500: 100 116 139;
+        --gray-600: 148 163 184;
+        --gray-700: 203 213 225;
+        --gray-800: 226 232 240;
+        --gray-900: 241 245 249;
+        --gray-950: 249 250 251;
+    }
+}
+:root[data-theme="light"] {
+    color-scheme: light;
+    --fb-bg: 241 245 249;
+    --fb-sidebar: 255 255 255;
+    --fb-card: 255 255 255;
+    --fb-cardMuted: 226 232 240;
+    --fb-primary: 2 132 199;
+    --fb-primaryHi: 3 105 161;
+    --fb-accent: 220 38 38;
+    --fb-text: 15 23 42;
+    --fb-textDim: 71 85 105;
+    --fb-border: 203 213 225;
+    --fb-good: 22 163 74;
+    --fb-mid: 161 98 7;
+    --fb-low: 220 38 38;
+    --fb-gold: 161 98 7;
+    --rb-text2: 30 41 59;
+    --rb-text3: 51 65 85;
+    --rb-white: 15 23 42;
+    --dark-900: 248 250 252;
+    --dark-800: 241 245 249;
+    --dark-700: 255 255 255;
+    --dark-600: 226 232 240;
+    --dark-500: 203 213 225;
+    --gray-50: 3 7 18;
+    --gray-100: 17 24 39;
+    --gray-200: 31 41 55;
+    --gray-300: 55 65 81;
+    --gray-400: 75 85 99;
+    --gray-500: 100 116 139;
+    --gray-600: 148 163 184;
+    --gray-700: 203 213 225;
+    --gray-800: 226 232 240;
+    --gray-900: 241 245 249;
+    --gray-950: 249 250 251;
+}
+
+/* `text-white` is used for headings on the legacy (originally dark-only)
+   screens. In light mode those follow the theme text colour, except on
+   coloured buttons/badges and dark surfaces where white is still correct. */
+.text-white:not([class*="bg-fb-primary"]):not([class*="bg-accent"]):not([class*="bg-fb-accent"]):not([class*="bg-red-"]):not([class*="bg-green-"]):not([class*="bg-fb-good"]):not([class*="bg-fb-low"]):not(#player *):not(.rb-on-dark *):not(button[class*="bg-fb-primary"] *):not(.bg-gradient-to-t *) {
+    color: rgb(var(--rb-white));
+}
+
+body { background-color: rgb(var(--fb-sidebar)); color: rgb(var(--fb-text)); }
+
+/* Home hero: artwork fades into the (always dark) banner background. */
+.rb-hero-fade {
+    background-image: linear-gradient(135deg, #0f172a 0%, #0f172a 40%, rgba(15, 23, 42, .55) 65%, rgba(15, 23, 42, .15) 100%);
+}
+.hover\:text-white:hover:not(#player *):not(.rb-on-dark *):not([class*="bg-fb-primary"]):not([class*="bg-accent"]) {
+    color: rgb(var(--rb-white));
+}
+
+/* ── Public build: library-management controls ───────────────────────────
+   The upstream Songs screen offers library management (rescan, metadata
+   matching, upload, multi-select for playlists/bulk edits, save-for-later,
+   smart playlists, artist tidy-up). RiffBoard's library is read-only for
+   visitors and the server refuses those requests anyway, so the controls are
+   hidden rather than deleted (keeps the diff from upstream small). */
+#v3-songs-select,
+#v3-songs-refresh,
+#v3-songs-refresh-meta,
+#v3-songs-unmatched,
+#v3-songs-upload,
+#v3-songs-match-review,
+#v3-meta-progress,
+#v3-songs-batch,
+[data-save],
+[data-ap-smart],
+[data-drawer-tidy],
+#alpha-warning-banner {
+    display: none !important;
+}

@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 64" role="img" aria-label="fee[dB]ack">
-  <!-- Full fee[dB]ack wordmark: fee + ack in primary text, [dB] in sky.
-       The brackets are literal characters, not borders (design-system §4). -->
-  <text x="6" y="32" dominant-baseline="central"
-        font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif"
-        font-weight="800" font-size="40" letter-spacing="-1.5">
-    <tspan fill="#f8fafc">fee</tspan><tspan fill="#0ea5e9">[dB]</tspan><tspan fill="#f8fafc">ack</tspan>
-  </text>
-</svg>

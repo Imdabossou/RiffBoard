@@ -26,7 +26,7 @@ cd "$(dirname "$0")/.."
 # is now a pinned devDependency (package.json/package-lock.json); `npm ci`
 # before this script (both here and in CI) is what actually makes the output
 # reproducible.
-exec npx tailwindcss \
+exec npx -y tailwindcss@3.4.19 \
     -c tailwind.config.js \
     -i static/_tailwind.src.css \
     -o static/tailwind.min.css \

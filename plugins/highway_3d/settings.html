@@ -126,7 +126,6 @@
             <option value="geometric">Geometric (rotating shapes)</option>
             <option value="butterchurn">Butterchurn (visualizer)</option>
             <option value="image" disabled>Custom image (none uploaded)</option>
-            <option value="video" disabled>Custom video (none uploaded)</option>
         </select>
     </div>
 
@@ -307,29 +306,6 @@
         <p id="h3d-bg-custom-image-error" class="text-xs text-red-400 mt-1 hidden"></p>
     </div>
 
-    <!-- Custom video upload (#19 follow-up). Bytes live on disk via
-         the plugin's routes.py upload route; localStorage holds only
-         the server-side filename (h3d_bg_customVideoName). Renders as
-         the `video` bg style; the picker option above auto-enables
-         once an asset is uploaded. -->
-    <div class="mt-3">
-        <label for="h3d-bg-custom-video-file" class="text-xs font-medium text-gray-400 mb-1 block">Custom video</label>
-        <p class="text-xs text-gray-500 mb-2">
-            Upload an MP4 or WebM (&le;50&nbsp;MB). Plays muted, looped
-            in the fog band when the style above is set to
-            <em>Custom video</em>. Bytes stay on the feedBack server,
-            not in the browser.
-        </p>
-        <div class="flex items-center gap-2">
-            <input type="file" id="h3d-bg-custom-video-file"
-                   accept="video/mp4,video/webm"
-                   class="text-xs text-gray-300 file:mr-2 file:px-2 file:py-1 file:rounded file:border-0 file:bg-dark-600 file:text-gray-300">
-            <button type="button" id="h3d-bg-custom-video-clear"
-                    class="text-xs px-2 py-1 rounded bg-dark-700 border border-gray-800 text-gray-400 hover:text-gray-200">Clear</button>
-        </div>
-        <p id="h3d-bg-custom-video-name" class="text-xs text-gray-500 mt-1"></p>
-        <p id="h3d-bg-custom-video-error" class="text-xs text-red-400 mt-1 hidden"></p>
-    </div>
 </div>
 
 <div role="group" aria-labelledby="h3d-camera-heading" class="mt-6">

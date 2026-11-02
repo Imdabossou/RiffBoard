@@ -19,14 +19,14 @@
     const DEFAULT = SOURCES.INTERNAL;
 
     const LABELS = Object.freeze({
-        [SOURCES.INTERNAL]: 'fee[dB]ack internal tone',
+        [SOURCES.INTERNAL]: 'RiffBoard internal tone',
         [SOURCES.EXTERNAL_HARDWARE]: 'External amp / hardware pedalboard',
         [SOURCES.SPARK_CONTROL_X]: 'Spark LIVE + Spark Control X',
     });
 
     const HELP_TEXT =
         'Choose External/Spark if your guitar tone comes from hardware like Spark LIVE. '
-        + 'fee[dB]ack will still score your playing but won\u2019t warn that no internal amp tone is loaded.';
+        + 'RiffBoard will still score your playing but won\u2019t warn that no internal amp tone is loaded.';
 
     function normalize(value) {
         if (value === SOURCES.EXTERNAL_HARDWARE || value === SOURCES.SPARK_CONTROL_X) return value;

@@ -1,5 +1,8 @@
 /**
- * Tailwind CSS build config for feedBack core.
+ * Tailwind CSS build config for RiffBoard (from feedBack core).
+ *
+ * Palette colours are CSS variables (static/riffboard/theme.css) so the light
+ * and dark themes swap at runtime without a second stylesheet.
  *
  * Replaces the Play CDN (`cdn.tailwindcss.com`) JIT runtime that
  * previously scanned the DOM ~1.8x/sec on the main thread, causing
@@ -31,29 +34,15 @@ module.exports = {
     theme: {
         extend: {
             colors: {
-                dark: { 900: '#050508', 800: '#0a0a12', 700: '#10101e', 600: '#181830', 500: '#1e1e3a' },
+                dark: { 900: 'rgb(var(--dark-900) / <alpha-value>)', 800: 'rgb(var(--dark-800) / <alpha-value>)', 700: 'rgb(var(--dark-700) / <alpha-value>)', 600: 'rgb(var(--dark-600) / <alpha-value>)', 500: 'rgb(var(--dark-500) / <alpha-value>)' },
+                gray: Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((n) => [n, `rgb(var(--gray-${n}) / <alpha-value>)`])),
                 accent: { DEFAULT: '#4080e0', light: '#60a0ff', dark: '#2060b0' },
                 gold: '#e8c040',
                 // fee[dB]ack v0.3.0 palette (additive). Namespaced under `fb`
                 // so it never clashes with the legacy `accent`/`dark`/`gold`
                 // tokens the 0.2.9 stylesheet still builds against.
                 // See ~/Repositories/feedBack-feedback-v030/design/01-design-system.md §1.
-                fb: {
-                    bg: '#0f172a',        // app background (navy)
-                    sidebar: '#111827',   // sidebar
-                    card: '#1e293b',      // cards / panels
-                    cardMuted: '#0b1220', // inset wells
-                    primary: '#0ea5e9',   // sky — primary actions, active nav, progress fill
-                    primaryHi: '#38bdf8', // hover
-                    accent: '#ef4444',    // red — Support Us, destructive, low-accuracy
-                    text: '#f8fafc',      // primary text
-                    textDim: '#94a3b8',   // secondary text
-                    border: '#334155',    // hairlines / card borders
-                    good: '#22c55e',      // accuracy >=90%
-                    mid: '#eab308',       // accuracy 50-89%
-                    low: '#ef4444',       // accuracy <50%
-                    gold: '#e8c040',      // mastery accent retained from legacy palette
-                },
+                fb: Object.fromEntries(["bg", "sidebar", "card", "cardMuted", "primary", "primaryHi", "accent", "text", "textDim", "border", "good", "mid", "low", "gold"].map((k) => [k, `rgb(var(--fb-${k}) / <alpha-value>)`])),
             },
             fontFamily: {
                 // Shared token used by BOTH the v2 (legacy) and v3 bodies. Keep it

@@ -1,5 +1,5 @@
 /*
- * fee[dB]ack v0.3.0 — app shell: sidebar, topbar, client routing.
+ * RiffBoard app shell (from fee[dB]ack v0.3.0): sidebar, topbar, client routing.
  *
  * Vanilla JS, no framework/bundler (constitution P-II). Reuses the engine
  * from app.js: navigation is the shared window.showScreen across both the new
@@ -29,45 +29,18 @@
     // label. Legacy screens are reused: "Songs" = #home (library), "Favorites"
     // = #favorites, "Settings" = #settings. New screens use #v3-* ids.
     const NAV = [
-        { key: 'home',       screen: 'v3-home',          label: 'Home',            group: 'HOME',    icon: 'home' },
-        { key: 'progress',   screen: 'v3-progress',      label: 'Progress',        group: 'HOME',    icon: 'trophy' },
-        { key: 'shop',       screen: 'v3-shop',          label: 'Unlockables',     group: 'HOME',    icon: 'tag' },
-        { key: 'feedbarcade', screen: 'v3-feedbarcade',   label: 'FeedBarcade',    group: 'HOME',    icon: 'arcade' },
-        { key: 'plugins',    screen: 'v3-plugins',       label: 'Plugins',         group: 'HOME',    icon: 'plug' },
-        { key: 'settings',   screen: 'settings',         label: 'Settings',        group: 'HOME',    icon: 'gear' },
-        { key: 'playlists',  screen: 'v3-playlists',     label: 'Playlists',       group: 'LIBRARY', icon: 'list' },
-        { key: 'songs',      screen: 'v3-songs',         label: 'Song Library',    group: 'LIBRARY', icon: 'disc' },
-        { key: 'lessons',    screen: 'v3-lessons',       label: 'Lessons',         group: 'LIBRARY', icon: 'lessons' },
-        { key: 'favorites',  screen: 'favorites',        label: 'Favorites',       group: 'LIBRARY', icon: 'star' },
-        { key: 'saved',      screen: 'v3-saved',         label: 'Saved for Later', group: 'LIBRARY', icon: 'bookmark' },
-        // Promoted plugins (group: null) — bundled plugins given their own
-        // first-class sidebar entry instead of the generic plugin gallery. They
-        // are placed by PROMOTED_PLUGINS below and their slots are filled by
-        // renderPromotedNav() only when the plugin is actually installed. All
-        // other plugins are reached solely via the single "Plugins" entry
-        // above. Screens are injected async by the plugin loader, so go()'s
-        // plugin- guard applies.
-        { key: 'virtuoso',    screen: 'plugin-virtuoso',    label: 'Virtuoso - Practice', group: null, icon: 'target' },
-        { key: 'career',      screen: 'plugin-career',      label: 'Career',      group: null,      icon: 'trophy' },
-        { key: 'rig_builder', screen: 'plugin-rig_builder', label: 'Rig Builder', group: null,      icon: 'amp' },
-        { key: 'editor',      screen: 'plugin-editor',      label: 'Song Editor', group: null,      icon: 'edit' },
-        { key: 'audio_engine', screen: 'plugin-audio_engine', label: 'Audio', group: null,        icon: 'amp' },
-        // Not in the sidebar groups, but routable (profile badge → here).
-        { key: 'profile',   screen: 'v3-profile',   label: 'Profile',         group: null,      icon: 'user' },
+        { key: 'home',         screen: 'v3-home',         label: 'Home',          group: 'PLAY',  icon: 'home' },
+        { key: 'songs',        screen: 'v3-songs',        label: 'Songs',         group: 'PLAY',  icon: 'disc' },
+        { key: 'favorites',    screen: 'favorites',       label: 'Favourites',    group: 'PLAY',  icon: 'star' },
+        { key: 'leaderboards', screen: 'v3-leaderboards', label: 'Leaderboards',  group: 'PLAY',  icon: 'trophy' },
+        { key: 'settings',     screen: 'settings',        label: 'Settings',      group: 'MORE',  icon: 'gear' },
+        { key: 'about',        screen: 'v3-about',        label: 'About',         group: 'MORE',  icon: 'info' },
     ];
-    // Bundled plugins promoted to dedicated sidebar entries. `anchorAfter` is
-    // the nav key the slot is rendered immediately below (within that key's
-    // group); a key that's the last item of the last group lands right after
-    // that group. Each is gated on the plugin actually being installed.
-    const PROMOTED_PLUGINS = [
-        { navKey: 'virtuoso',    pluginId: 'virtuoso',    slotId: 'v3-nav-virtuoso',    anchorAfter: 'feedbarcade' },
-        { navKey: 'career',      pluginId: 'career',      slotId: 'v3-nav-career',      anchorAfter: 'feedbarcade' },
-        { navKey: 'rig_builder', pluginId: 'rig_builder', slotId: 'v3-nav-rig-builder', anchorAfter: 'saved' },
-        { navKey: 'editor',      pluginId: 'editor',      slotId: 'v3-nav-editor',     anchorAfter: 'songs' },
-        { navKey: 'audio_engine', pluginId: 'audio_engine', slotId: 'v3-nav-audio-engine', anchorAfter: 'settings' },
-    ];
-    const TOPBAR_KEYS = ['home', 'songs', 'plugins', 'settings'];
-    const SIDEBAR_GROUPS = ['HOME', 'LIBRARY'];
+    // RiffBoard ships no sidebar-promoted plugins (upstream's career, editor,
+    // rig builder... are not part of the public build).
+    const PROMOTED_PLUGINS = [];
+    const TOPBAR_KEYS = ['home', 'songs', 'leaderboards', 'settings'];
+    const SIDEBAR_GROUPS = ['PLAY', 'MORE'];
 
     // Minimal inline icon set (currentColor 24x24 stroke paths).
     const ICONS = {
@@ -85,6 +58,7 @@
         tag: 'M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0l-7-7V4h9.6l7.4 7.4a2 2 0 010 2zM7.5 7.5h.01',
         amp: 'M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1zm11 4a3 3 0 100 6 3 3 0 000-6zM6.5 8.5h.01M9 8.5h.01',
         target: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 4a5 5 0 100 10 5 5 0 000-10zm0 4a1 1 0 100 2 1 1 0 000-2z',
+        info: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 8v5m0-8h.01',
         edit: 'M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z',
     };
     function iconSvg(name) {
@@ -100,8 +74,7 @@
     // The topbar IS each page's header row, so its title mirrors the screen.
     function titleFor(screenId) {
         if (screenId === 'v3-home') {
-            const p = (window.v3Profile && window.v3Profile.get && window.v3Profile.get()) || null;
-            return 'Welcome back, ' + ((p && p.display_name) || 'there') + '!';
+            return 'Welcome to RiffBoard';
         }
         const entry = byScreen(screenId);
         if (entry) return entry.label;
@@ -152,7 +125,7 @@
         // Guard plugin screens that may not be injected yet (loadPlugins runs
         // async at app.js boot). showScreen() throws on a missing element.
         if (screenId.indexOf('plugin-') === 0 && !document.getElementById(screenId)) {
-            window.showScreen('v3-plugins');
+            window.showScreen('v3-home');
             return;
         }
         window.showScreen(screenId);   // wrapper below re-syncs active state
@@ -194,9 +167,6 @@
     }
 
     // ── Topbar ───────────────────────────────────────────────────────────---
-    // Funding cleared to come back online 2026-06-30 (offending functionality
-    // removed). feedBack-branded Patreon page.
-    const PATREON_URL = 'https://patreon.com/got_feedback';
     function renderTopbar() {
         const bar = document.getElementById('v3-topbar');
         if (!bar) return;
@@ -214,12 +184,6 @@
             '<input id="v3-search" type="search" placeholder="Search songs…" aria-label="Search songs" ' +
             'class="w-full bg-gray-800/50 border border-gray-700 rounded-md pl-10 pr-4 py-2 text-sm ' +
             'text-fb-text placeholder-fb-textDim focus:border-fb-primary focus:ring-1 focus:ring-fb-primary outline-none"></div>' +
-            // Support Us! — stays on this top utility row (NOT the title row),
-            // pushed to the right with ml-auto; hidden on the smallest widths.
-            '<a href="' + PATREON_URL + '" target="_blank" rel="noopener" class="ml-auto ' +
-            'hidden sm:inline-flex items-center gap-2 bg-fb-accent hover:bg-red-600 text-white text-sm font-medium px-4 py-2 rounded-md shadow-lg shadow-fb-accent/20 transition-colors">' +
-            '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M14.8 3c-3 0-5.4 2.4-5.4 5.4S11.8 13.9 14.8 13.9 20.2 11.5 20.2 8.4 17.8 3 14.8 3zM3.8 3h3.4v18H3.8z"/></svg>' +
-            'Support Us!</a>' +
             '</div>' +
             // Row 2 — page header: title + ONLY the tuner/instrument/profile
             // badge cluster on the same line as the header.
@@ -228,7 +192,6 @@
             '<div class="flex items-center gap-2 shrink-0">' +
             '<span id="v3-badge-tuner" class="contents"></span>' +
             '<span id="v3-badge-instrument" class="contents"></span>' +
-            '<span id="v3-badge-profile" class="contents"></span>' +
             '</div></div>';
 
         const burger = document.getElementById('v3-hamburger');
@@ -368,7 +331,7 @@
     // ── Boot ────────────────────────────────────────────────────────────────
     async function boot() {
         var _v3brand = document.getElementById('v3-brand');
-        if (_v3brand) _v3brand.innerHTML = '<img src="/static/v3/brand/feedback-logo-light.png" alt="fee[dB]ack" style="width:100%;height:auto;display:block">';
+        if (_v3brand) { _v3brand.innerHTML = '<a href="#/home" class="flex items-center gap-3 no-underline" aria-label="RiffBoard home"><img src="/static/v3/brand/riffboard-icon.svg" alt="" width="40" height="40" style="width:2.5rem;height:2.5rem"><span class="text-2xl font-extrabold tracking-tight text-fb-text">Riff<span class="text-fb-primary">Board</span></span></a>'; _v3brand.querySelector('a').addEventListener('click', (e) => { e.preventDefault(); go('v3-home'); }); }
         renderSidebar();
         renderTopbar();
         ensureBackdrop();

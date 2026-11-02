@@ -1,14 +1,29 @@
 {
-  "name": "fee[dB]ack",
-  "short_name": "feedback",
-  "description": "Practice loop for your guitar library — play along, track accuracy, level up.",
-  "start_url": "/v3",
+  "name": "RiffBoard",
+  "short_name": "RiffBoard",
+  "description": "Play along to original songs on guitar or bass and chase the highscore.",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "icons": [
-    { "src": "/static/v3/brand/favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
-    { "src": "/static/v3/brand/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any maskable" },
-    { "src": "/static/v3/brand/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any maskable" }
+    {
+      "src": "/static/v3/brand/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/v3/brand/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/v3/brand/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    }
   ]
 }

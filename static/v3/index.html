@@ -1,24 +1,16 @@
 <!DOCTYPE html>
 <!--
-  fee[dB]ack v0.3.0 shell — the app's only UI, served at `/` (and `/v3`, a
-  back-compat alias). The classic v2 shell it was forked from is deleted.
-
-  Originally a re-chromed copy of that shell: the v0.3.0 sidebar + topbar
-  replace the (hidden) legacy navbar, new #v3-* screens are added, and all the
-  legacy screens (#home library, #favorites, #settings, #player, #audio, plugin
-  nav containers) are kept verbatim so static/app.js boots UNMODIFIED and the
-  whole engine — player/highway, plugin loader, capabilities, audio, library,
-  settings — is reused as-is. Navigation is the shared window.showScreen across
-  both #v3-* and legacy/#plugin-* screens.
-  See ~/Repositories/feedBack-feedback-v030/prompts/12-app-shell.md.
+  RiffBoard shell, served at `/`. Forked from fee[dB]ack v0.3.0's v3 shell: the
+  sidebar/topbar chrome plus the reused engine screens (#home library,
+  #favorites, #settings, #player) that static/app.js drives.
 -->
 <html lang="en" class="dark scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0f172a">
-    <meta name="description" content="fee[dB]ack — practice loop for your guitar library: play along, track accuracy, level up.">
-    <title>fee[dB]ack</title>
+    <meta name="description" content="RiffBoard: play along to original songs on guitar, bass, drums or keys and chase the highscore.">
+    <title>RiffBoard</title>
     <!-- Splitscreen pop-out windows (`?ssFollower=1`) get driven into follower
          mode by the splitscreen plugin AFTER it loads, which is well after
          the parser has rendered v3-sidebar / v3-topbar / #player-controls /
@@ -61,6 +53,30 @@
             } catch (_) { /* file:// or sandboxed iframe */ }
         })();
     </script>
+    <!-- Theme (System / Light / Dark): set data-theme before first paint so
+         there's no flash of the wrong theme. "system" leaves it unset and the
+         prefers-color-scheme rules in static/riffboard/theme.css decide. -->
+    <script>
+        (function () {
+            var KEY = 'riffboard.theme';
+            function apply(v) {
+                var el = document.documentElement;
+                if (v === 'light' || v === 'dark') el.setAttribute('data-theme', v);
+                else el.removeAttribute('data-theme');
+            }
+            var saved = 'system';
+            try { saved = localStorage.getItem(KEY) || 'system'; } catch (_) { /* private mode */ }
+            apply(saved);
+            window.riffboardTheme = {
+                get: function () { return saved; },
+                set: function (v) {
+                    saved = (v === 'light' || v === 'dark') ? v : 'system';
+                    try { localStorage.setItem(KEY, saved); } catch (_) { /* */ }
+                    apply(saved);
+                },
+            };
+        })();
+    </script>
     <!-- Interface size (Accessibility): apply the saved UI scale to the root
          font-size BEFORE any stylesheet paints, so there is no flash-of-reflow
          on load. Mirrors capabilities/interface-scale.js, which is the
@@ -92,13 +108,13 @@
          (dark/accent/gold colors, Inter font) live in tailwind.config.js. -->
     <link rel="stylesheet" href="/static/tailwind.min.css">
     <!-- UI font: Rubik (Google Fonts, OFL). Applied via fontFamily.display in tailwind.config.js. -->
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/fonts/rubik.css">
     <link rel="stylesheet" href="/static/style.css">
+    <!-- v0.3.0 shell styles (radial-gradient bg, custom scrollbars). -->
     <link rel="stylesheet" href="/static/vendor/shepherd.css">
     <link rel="stylesheet" href="/static/tour-engine.css">
-    <!-- v0.3.0 shell styles (radial-gradient bg, custom scrollbars). -->
     <link rel="stylesheet" href="/static/v3/v3.css">
+    <link rel="stylesheet" href="/static/riffboard/riffboard.css">
     <!-- Detachable panes: the pop-out chip, the dock, and the widgets built-in
          panes render with. Hand-authored (not Tailwind-scanned) so a
          runtime-installed plugin can use the chip without shipping its own CSS. -->
@@ -122,6 +138,9 @@
     <!-- Diagnostics console capture must wrap console.* before any other
          script logs anything; load it as early as possible. See
          docs/diagnostics-bundle-spec.md (feedBack#166). -->
+    <!-- RiffBoard: per-visitor state (settings, favourites, loops...) lives in this
+         browser, not on the shared server. Must run before anything fetches. -->
+    <script defer src="/static/riffboard/local-api.js"></script>
     <script defer src="/static/diagnostics.js"></script>
     <script type="module" src="/static/capabilities.js"></script>
     <script type="module" src="/static/capabilities/library.js"></script>
@@ -144,7 +163,7 @@
          the inline brand is the no-JS fallback. -->
     <aside id="v3-sidebar" class="w-64 border-r border-fb-border/50 flex-col shrink-0 hidden md:flex">
         <div id="v3-brand" class="p-6">
-            <img src="/static/v3/brand/feedback-logo-light.png" alt="fee[dB]ack" style="width:100%;height:auto;display:block">
+            <a href="#/home" class="flex items-center gap-3 no-underline" aria-label="RiffBoard home"><img src="/static/v3/brand/riffboard-icon.svg" alt="" width="40" height="40" style="width:2.5rem;height:2.5rem"><span class="text-2xl font-extrabold tracking-tight text-fb-text">Riff<span class="text-fb-primary">Board</span></span></a>
         </div>
         <nav id="v3-nav" class="flex-1 overflow-y-auto px-3 pb-6 space-y-6" aria-label="Primary"></nav>
     </aside>
@@ -158,25 +177,8 @@
              plugins 19, profile/playlists/saved 15/16). #v3-home is the default. -->
         <div id="v3-home" class="screen active"></div>
         <div id="v3-songs" class="screen"></div>
-        <div id="v3-plugins" class="screen"></div>
-        <div id="v3-profile" class="screen"></div>
-        <div id="v3-progress" class="screen"></div>
-        <div id="v3-shop" class="screen"></div>
-        <div id="v3-playlists" class="screen"></div>
-        <div id="v3-saved" class="screen"></div>
-        <div id="v3-feedbarcade" class="screen"></div>
-        <!-- Lessons: native v3 tutorials screen lands in a later prompt; until
-             the tutorials plugin is installed this shows a placeholder rather
-             than dumping to the Plugins page. -->
-        <div id="v3-lessons" class="screen">
-            <div class="max-w-3xl mx-auto px-6 md:px-8 pb-8">
-                <div class="bg-fb-card/80 backdrop-blur rounded-xl p-8 border border-fb-border/50 text-center">
-                    <div class="text-4xl mb-3">🎓</div>
-                    <h3 class="text-xl font-bold text-fb-text mb-1">Lessons</h3>
-                    <p class="text-fb-textDim text-sm">Guided lessons are coming soon. They’ll appear here once the tutorials plugin is installed.</p>
-                </div>
-            </div>
-        </div>
+        <div id="v3-leaderboards" class="screen"></div>
+        <div id="v3-about" class="screen"></div>
 
     <!-- Legacy top navbar — hidden in v3 (the sidebar/topbar replace it) but kept
          in the DOM so app.js's #nav-plugins / #mobile-nav-plugins injection and the
@@ -192,7 +194,6 @@
             <div class="hidden md:flex items-center gap-8">
                 <a href="#" onclick="showScreen('home');return false" class="text-sm text-gray-400 hover:text-white transition">Library</a>
                 <a href="#" onclick="showScreen('favorites');return false" class="text-sm text-gray-400 hover:text-white transition">Favorites</a>
-                <a href="#" onclick="document.getElementById('upload-songs-file').click();return false" class="text-sm text-gray-400 hover:text-white transition">Upload</a>
                 <span id="nav-plugins" class="contents"></span>
                 <a href="#" onclick="showScreen('settings');return false" class="text-sm text-gray-400 hover:text-white transition">Settings</a>
             </div>
@@ -205,7 +206,6 @@
             <div class="px-6 py-4 flex flex-col gap-3">
                 <a href="#" onclick="showScreen('home');this.parentElement.parentElement.classList.add('hidden');return false" class="text-gray-400 hover:text-white">Library</a>
                 <a href="#" onclick="showScreen('favorites');this.parentElement.parentElement.classList.add('hidden');return false" class="text-gray-400 hover:text-white">Favorites</a>
-                <a href="#" onclick="document.getElementById('upload-songs-file').click();this.parentElement.parentElement.classList.add('hidden');return false" class="text-gray-400 hover:text-white">Upload</a>
                 <span id="mobile-nav-plugins" class="flex flex-col gap-2 border-t border-b border-gray-800 py-2 my-1">
                     <span class="text-xs text-gray-600 uppercase tracking-wider">Plugins</span>
                 </span>
@@ -213,10 +213,6 @@
             </div>
         </div>
     </nav>
-
-    <!-- Hidden file input shared by the navbar "Upload" link. Kept at body
-         level so it stays reachable regardless of which screen is active. -->
-    <input type="file" id="upload-songs-file" accept=".feedpak,.sloppak" multiple class="hidden" onchange="uploadSongs(this.files); this.value=''">
 
     <!-- ══ HOME (Hero + Library) — reused as the v3 "Songs" screen ════════ -->
     <div id="home" class="screen">
@@ -404,10 +400,9 @@
                 <button type="button" class="fb-tab" data-tab="audio">Audio</button>
                 <button type="button" class="fb-tab" data-tab="graphics">Graphics</button>
                 <button type="button" class="fb-tab" data-tab="keybinds">Keybinds</button>
-                <button type="button" class="fb-tab" data-tab="progression">Progression</button>
                 <button type="button" class="fb-tab" data-tab="mic">Mic</button>
-                <button type="button" class="fb-tab" data-tab="plugins">Plugins</button>
-                <button type="button" class="fb-tab" data-tab="system">System</button>
+                <button type="button" class="fb-tab" data-tab="plugins">More</button>
+                <button type="button" class="fb-tab" data-tab="system">About</button>
             </div>
 
             <!-- ══ GAMEPLAY ════════════════════════════════════════════════ -->
@@ -451,23 +446,6 @@
                             </select>
                         </div>
                     </div>
-                    <!-- Instrument pathway -->
-                    <div class="fb-srow">
-                        <span class="fb-srow-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7"/></svg></span>
-                        <div class="fb-srow-main">
-                            <div class="fb-srow-title">Instrument pathway</div>
-                            <div class="fb-srow-desc">Preferred path for the selected instrument. This is remembered per instrument profile.</div>
-                        </div>
-                        <div class="fb-srow-control">
-                            <select id="setting-instrument-pathway" onchange="setInstrumentPathway(this.value)"
-                                class="bg-dark-700 border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-gray-300 outline-none">
-                                <option value="songs">Songs</option>
-                                <option value="practice">Practice</option>
-                                <option value="learn">Learn</option>
-                                <option value="studio">Studio</option>
-                            </select>
-                        </div>
-                    </div>
                     <!-- Arrangement routes (naming mode) -->
                     <div class="fb-srow">
                         <span class="fb-srow-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7"/></svg></span>
@@ -507,23 +485,6 @@
                         <input type="range" id="setting-highway-speed" min="0" max="100" step="5" value="100"
                             oninput="setMastery(this.value)" class="fb-srow-wide slider-input">
                     </div>
-                    <!-- Miss penalty (stub) -->
-                    <div class="fb-srow">
-                        <span class="fb-srow-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19H19a2 2 0 001.71-3L13.71 4a2 2 0 00-3.42 0L3.34 16a2 2 0 001.73 3z"/></svg></span>
-                        <div class="fb-srow-main">
-                            <div class="fb-srow-title">Miss penalty <span class="fb-stub-note">Not yet active</span></div>
-                            <div class="fb-srow-desc">How harshly missed notes are scored. Saved now; scoring wiring lands in a later release.</div>
-                        </div>
-                        <div class="fb-srow-control">
-                            <select id="setting-miss-penalty" onchange="persistSetting('miss_penalty', this.value)"
-                                class="bg-dark-700 border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-gray-300 outline-none">
-                                <option value="none">None</option>
-                                <option value="low">Low</option>
-                                <option value="medium">Standard</option>
-                                <option value="high">High</option>
-                            </select>
-                        </div>
-                    </div>
                     <!-- Countdown before song -->
                     <div class="fb-srow">
                         <span class="fb-srow-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m-3 5a9 9 0 100-18 9 9 0 000 18z"/></svg></span>
@@ -536,22 +497,6 @@
                                 <input type="checkbox" id="setting-countdown-before-song" onchange="setCountdownBeforeSong(this.checked)">
                                 <span class="fb-switch-track"></span>
                             </label>
-                        </div>
-                    </div>
-                    <!-- Fail behavior (stub) -->
-                    <div class="fb-srow">
-                        <span class="fb-srow-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></span>
-                        <div class="fb-srow-main">
-                            <div class="fb-srow-title">Fail behavior <span class="fb-stub-note">Not yet active</span></div>
-                            <div class="fb-srow-desc">What happens when you fail a section. Saved now; gameplay wiring lands in a later release.</div>
-                        </div>
-                        <div class="fb-srow-control">
-                            <select id="setting-fail-behavior" onchange="persistSetting('fail_behavior', this.value)"
-                                class="bg-dark-700 border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-gray-300 outline-none">
-                                <option value="continue">Continue playing</option>
-                                <option value="restart">Restart section</option>
-                                <option value="stop">Stop song</option>
-                            </select>
                         </div>
                     </div>
                     <!-- Autoplay & auto-exit -->
@@ -603,6 +548,23 @@
             <div class="fb-tabpanel" data-tab="accessibility">
                 <div class="fb-tabpanel-head"><h3>Accessibility</h3></div>
                 <div class="fb-srows">
+                    <!-- Theme -->
+                    <div class="fb-srow">
+                        <span class="fb-srow-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.4 6.4l-.7-.7M6.3 6.3l-.7-.7m12.8 0l-.7.7M6.3 17.7l-.7.7M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg></span>
+                        <div class="fb-srow-main">
+                            <div class="fb-srow-title">Theme</div>
+                            <div class="fb-srow-desc">Light or dark pages. System follows your device. The player always stays dark.</div>
+                        </div>
+                        <div class="fb-srow-control">
+                            <select id="setting-theme" aria-label="Theme" onchange="window.riffboardTheme.set(this.value)"
+                                class="bg-dark-700 border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-gray-300 outline-none">
+                                <option value="system">System</option>
+                                <option value="light">Light</option>
+                                <option value="dark">Dark</option>
+                            </select>
+                            <script>try { document.getElementById('setting-theme').value = window.riffboardTheme.get(); } catch (_) {}</script>
+                        </div>
+                    </div>
                     <!-- Interface size -->
                     <div class="fb-srow fb-srow-stack">
                         <div style="display:flex; align-items:center; gap:1rem;">
@@ -637,40 +599,10 @@
             <div class="fb-tabpanel" data-tab="audio">
                 <div class="fb-tabpanel-head"><h3>Audio Settings</h3></div>
                 <div class="fb-srows">
-                    <!-- Live guitar tone source -->
-                    <div class="fb-srow fb-srow-stack">
-                        <div style="display:flex; align-items:center; gap:1rem;">
-                            <span class="fb-srow-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M19 5a9 9 0 010 14M5 9v6h4l5 5V4L9 9H5z"/></svg></span>
-                            <div class="fb-srow-main">
-                                <div class="fb-srow-title">Live guitar tone source</div>
-                                <div class="fb-srow-desc">Choose External/Spark if your guitar tone comes from hardware like Spark LIVE. fee[dB]ack still scores your playing but won't warn that no internal amp tone is loaded.</div>
-                            </div>
-                        </div>
-                        <select id="setting-live-guitar-tone-source"
-                            class="fb-srow-wide bg-dark-700 border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-gray-300 outline-none">
-                            <option value="internal">fee[dB]ack internal tone</option>
-                            <option value="external_hardware">External amp / hardware pedalboard</option>
-                            <option value="spark_control_x">Spark LIVE + Spark Control X</option>
-                        </select>
-                    </div>
-                    <!-- Demucs server -->
-                    <div class="fb-srow fb-srow-stack">
-                        <div style="display:flex; align-items:center; gap:1rem;">
-                            <span class="fb-srow-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg></span>
-                            <div class="fb-srow-main">
-                                <div class="fb-srow-title">Demucs server (for stem separation)</div>
-                                <div class="fb-srow-desc">Optional. Run <a href="https://github.com/got-feedback/feedBack-demucs-server" target="_blank" rel="noopener" class="text-accent hover:text-accent-light underline">feedBack-demucs-server</a> on a GPU machine to offload stem splitting and avoid resource exhaustion on the host.</div>
-                            </div>
-                        </div>
-                        <div class="fb-srow-control">
-                            <!-- Autosave on blur/enter via a single-key POST (like every other v3
-                                 setting), so setting the address never depends on the shared Save
-                                 button — whose bundled dlc_dir could otherwise block it. Save button
-                                 kept for discoverability. -->
-                            <input type="text" id="demucs-server-url" placeholder="http://192.168.1.100:7865"
-                                onchange="persistSetting('demucs_server_url', this.value.trim())"
-                                class="bg-dark-700 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-gray-300 placeholder-gray-600 focus:border-accent/50 outline-none">
-                            <button onclick="saveSettings()" class="bg-accent hover:bg-accent-light px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition">Save</button>
+                    <div class="fb-srow">
+                        <div class="fb-srow-main">
+                            <div class="fb-srow-title">Microphone and input</div>
+                            <div class="fb-srow-desc">Plug in (or play near your mic) and RiffBoard listens to score your run. Pick your input and calibrate on the Mic tab.</div>
                         </div>
                     </div>
                 </div>
@@ -691,13 +623,6 @@
                 <div id="settings-keybinds"></div>
             </div>
 
-            <!-- ══ PROGRESSION ═════════════════════════════════════════════ -->
-            <div class="fb-tabpanel" data-tab="progression">
-                <div class="fb-tabpanel-head"><h3>Progression Settings</h3></div>
-                <div id="plugin-settings-progression" class="space-y-3"></div>
-                <p class="fb-tabpanel-empty" data-empty-for="plugin-settings-progression">No progression plugins are installed.</p>
-            </div>
-
             <!-- ══ MIC ═════════════════════════════════════════════════════ -->
             <div class="fb-tabpanel" data-tab="mic">
                 <div class="fb-tabpanel-head"><h3>Microphone &amp; Detection</h3></div>
@@ -707,207 +632,33 @@
 
             <!-- ══ PLUGINS (fallback for uncategorized panels) ═════════════ -->
             <div class="fb-tabpanel" data-tab="plugins">
-                <div class="fb-tabpanel-head"><h3>Plugins</h3></div>
-                <div class="fb-srows">
-                    <div class="fb-srow fb-srow-stack">
-                        <div class="fb-srow-main">
-                            <div class="fb-srow-title">Plugin updates</div>
-                            <div class="fb-srow-desc">Check installed plugins for newer versions.</div>
-                        </div>
-                        <div class="fb-srow-control" style="justify-content:flex-start;">
-                            <button onclick="checkPluginUpdates()" id="btn-check-updates" class="bg-dark-600 hover:bg-dark-500 px-5 py-2.5 rounded-xl text-sm text-gray-300 transition">Check for Updates</button>
-                            <span id="updates-status" class="text-xs text-gray-500"></span>
-                        </div>
-                        <div id="plugin-updates-list" class="space-y-2 fb-srow-wide"></div>
-                    </div>
-                </div>
+                <div class="fb-tabpanel-head"><h3>More</h3></div>
                 <!-- Per-plugin collapsible sections injected here (uncategorized). -->
                 <div id="plugin-settings" class="space-y-3" style="margin-top:.6rem;"></div>
             </div>
 
-            <!-- ══ SYSTEM ══════════════════════════════════════════════════ -->
+            <!-- ══ ABOUT ═════════════════════════════════════════════════ -->
             <div class="fb-tabpanel" data-tab="system">
-                <div class="fb-tabpanel-head"><h3>System</h3></div>
+                <div class="fb-tabpanel-head"><h3>About</h3></div>
                 <div class="fb-srows">
-                    <!-- App Updates — desktop-only; setupAppUpdates() unhides. -->
-                    <div id="app-updates-block" class="hidden fb-srow fb-srow-stack">
-                        <div class="fb-srow-main">
-                            <div class="fb-srow-title">App updates</div>
-                            <div class="fb-srow-desc">Velopack auto-update channel for the desktop app.</div>
-                        </div>
-                        <div class="fb-srow-control" style="flex-wrap:wrap;">
-                            <select id="app-update-channel"
-                                class="bg-dark-700 border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-gray-300 outline-none">
-                                <option value="stable">Stable</option>
-                                <option value="rc">Release candidate</option>
-                                <option value="beta">Beta</option>
-                                <option value="alpha">Alpha</option>
-                                <option value="nightly">Nightly</option>
-                            </select>
-                            <button id="app-update-check-now"
-                                class="bg-accent hover:bg-accent-light px-4 py-2.5 rounded-xl text-sm font-medium text-white transition disabled:opacity-50">
-                                Check for updates
-                            </button>
-                        </div>
-                        <p id="app-update-status" class="text-xs text-gray-500 fb-srow-wide">Loading updater status…</p>
-                        <p id="app-update-linux-note" class="hidden text-xs text-yellow-300 fb-srow-wide">
-                            Auto-update on Linux only works for the AppImage build on the Nightly channel —
-                            <a href="https://github.com/got-feedBack/feedBack-desktop/releases" target="_blank" rel="noopener" class="text-accent hover:text-accent-light underline">download other versions from GitHub Releases</a>.
-                        </p>
-                    </div>
-                    <!-- Window options — desktop-only; setupWindowOptions() unhides. -->
-                    <div id="window-options-block" class="hidden">
-                        <div class="fb-srow">
-                            <div class="fb-srow-main">
-                                <div class="fb-srow-title">Fullscreen</div>
-                                <div class="fb-srow-desc">Run fee[dB]ack in fullscreen mode. On macOS, changes take effect on the next launch.</div>
-                            </div>
-                            <div class="fb-srow-control">
-                                <label class="fb-switch">
-                                    <input type="checkbox" id="setting-start-fullscreen">
-                                    <span class="fb-switch-track"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Library folder path -->
                     <div class="fb-srow fb-srow-stack">
                         <div class="fb-srow-main">
-                            <div class="fb-srow-title">Library folder path</div>
-                            <div class="fb-srow-desc">The folder fee[dB]ack scans for your song library.</div>
+                            <div class="fb-srow-title">Your settings stay on this device</div>
+                            <div class="fb-srow-desc">RiffBoard has no accounts. Everything you change here (input, calibration, difficulty, favourites) is saved in this browser only. Clearing site data resets it.</div>
                         </div>
-                        <div class="fb-srow-control">
-                            <input type="text" id="dlc-path" placeholder="/path/to/your/library"
-                                class="bg-dark-700 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-gray-300 placeholder-gray-600 focus:border-accent/50 outline-none">
-                            <button onclick="pickDlcFolder()" id="btn-pick-dlc" class="hidden bg-dark-600 hover:bg-dark-500 px-4 py-2.5 rounded-xl text-sm text-gray-300 transition whitespace-nowrap">📂 Browse</button>
-                            <button onclick="saveSettings()" class="bg-accent hover:bg-accent-light px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition">Save</button>
+                        <div class="fb-srow-control" style="justify-content:flex-start;">
+                            <button type="button" onclick="window.riffboardLocal && window.riffboardLocal.resetAll()" class="bg-dark-600 hover:bg-dark-500 px-5 py-2.5 rounded-xl text-sm text-gray-300 transition">Reset everything on this device</button>
                         </div>
-                    </div>
-                    <!-- Library rescan -->
-                    <div class="fb-srow fb-srow-stack">
-                        <div class="fb-srow-main">
-                            <div class="fb-srow-title">Library</div>
-                            <div class="fb-srow-desc">Rescan checks for new songs. Full Rescan clears the cache and re-imports everything.</div>
-                        </div>
-                        <div class="fb-srow-control">
-                            <button onclick="rescanLibrary()" id="btn-rescan" class="bg-dark-600 hover:bg-dark-500 px-5 py-2.5 rounded-xl text-sm text-gray-300 transition">Rescan Library</button>
-                            <button onclick="fullRescanLibrary()" id="btn-full-rescan" class="bg-dark-600 hover:bg-red-900/30 px-5 py-2.5 rounded-xl text-sm text-gray-400 transition">Full Rescan</button>
-                            <span id="rescan-status" class="text-xs text-gray-500"></span>
-                        </div>
-                    </div>
-                    <!-- Metadata matching (P8 — wired by static/v3/match-review.js) -->
-                    <div class="fb-srow fb-srow-stack">
-                        <div class="fb-srow-main">
-                            <div class="fb-srow-title">Metadata matching</div>
-                            <div class="fb-srow-desc">Matches your charts against MusicBrainz in the background to tidy names, years and genres — display only, your files are never modified. Matches at or above the confidence level apply automatically; the rest wait in the library's review queue. Turning this off never disables manual match fixes.</div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 mb-1 text-xs text-gray-400 fb-srow-wide">
-                            <label class="flex items-center gap-2"><input type="checkbox" id="enrich-enabled" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Match songs automatically</label>
-                            <label class="flex items-center gap-2">Auto-apply confidence
-                                <select id="enrich-threshold" class="bg-dark-700 border border-gray-800 rounded-xl px-2 py-1.5 text-xs text-gray-300 outline-none">
-                                    <option value="0.85">85% — more auto-matches</option>
-                                    <option value="0.9" selected>90% (recommended)</option>
-                                    <option value="0.95">95% — cautious</option>
-                                    <option value="1.01">Always review</option>
-                                </select>
-                            </label>
-                        </div>
-                        <!-- R1 scraper options: sources (who may be contacted) ×
-                             auto-apply fields (what a confident match fills in). -->
-                        <div class="fb-srow-wide mb-1">
-                            <div class="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Sources</div>
-                            <div class="grid grid-cols-2 gap-2 text-xs text-gray-400">
-                                <label class="flex items-center gap-2"><input type="checkbox" id="enrich-src-musicbrainz" checked class="rounded border-gray-600 bg-dark-700 text-accent"> MusicBrainz — names, years, genres</label>
-                                <label class="flex items-center gap-2"><input type="checkbox" id="enrich-src-caa" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Cover Art Archive — album covers</label>
-                            </div>
-                        </div>
-                        <div class="fb-srow-wide mb-1">
-                            <div class="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Auto-apply</div>
-                            <div class="grid grid-cols-4 gap-2 text-xs text-gray-400">
-                                <label class="flex items-center gap-2"><input type="checkbox" id="enrich-apply-names" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Names</label>
-                                <label class="flex items-center gap-2"><input type="checkbox" id="enrich-apply-year" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Year</label>
-                                <label class="flex items-center gap-2"><input type="checkbox" id="enrich-apply-genres" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Genres</label>
-                                <label class="flex items-center gap-2"><input type="checkbox" id="enrich-apply-art" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Cover art</label>
-                            </div>
-                            <div class="text-[11px] text-gray-600 mt-1">What a confident match may fill in on its own — matches you confirm in the review queue always apply in full.</div>
-                        </div>
-                        <!-- Audio fingerprint (AcoustID) — opt-in, default OFF. Wired by match-review.js. -->
-                        <div class="fb-srow-wide mb-1">
-                            <div class="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Audio fingerprint (AcoustID)</div>
-                            <label class="flex items-center gap-2 text-xs text-gray-400 mb-1"><input type="checkbox" id="acoustid-enabled" class="rounded border-gray-600 bg-dark-700 text-accent"> Identify by audio — reads the recording itself for the exact version (studio vs live/extended)</label>
-                            <input type="text" id="acoustid-api-key" placeholder="AcoustID application key" class="w-full bg-dark-700 border border-gray-800 rounded-xl px-2 py-1.5 text-xs text-gray-300 outline-none">
-                            <div class="text-[11px] text-gray-600 mt-1">Opt-in. Get a free key at acoustid.org/new-application; the fpcalc (Chromaprint) binary must be on the server's PATH.</div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 mb-1 text-xs text-gray-400 fb-srow-wide">
-                            <label class="flex items-center gap-2">Review queue order
-                                <select id="enrich-review-order" class="bg-dark-700 border border-gray-800 rounded-xl px-2 py-1.5 text-xs text-gray-300 outline-none">
-                                    <option value="missing_first" selected>Missing info first</option>
-                                    <option value="artist">Artist A–Z</option>
-                                    <option value="recent">Recently added</option>
-                                </select>
-                            </label>
-                        </div>
-                        <div class="fb-srow-control">
-                            <button id="enrich-match-now" class="bg-dark-600 hover:bg-dark-500 px-5 py-2.5 rounded-xl text-sm text-gray-300 transition">Match Now</button>
-                            <span id="enrich-status" class="text-xs text-gray-500"></span>
-                        </div>
-                    </div>
-                    <!-- Artist pages (PR-B — wired by static/v3/match-review.js). Sits
-                         beside the Metadata matching card; the Settings→Library tab
-                         regroup is a separate PR. -->
-                    <div class="fb-srow fb-srow-stack">
-                        <div class="fb-srow-main">
-                            <div class="fb-srow-title">Artist pages</div>
-                            <div class="fb-srow-desc">A page for every artist in your library — their songs, albums and your practice progress, built entirely from your local collection. External links (official site, tour dates, videos, social) come from one MusicBrainz lookup per matched artist and always open in your browser — nothing plays in-app, and they stay off until you opt in.</div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 mb-1 text-xs text-gray-400 fb-srow-wide">
-                            <label class="flex items-center gap-2"><input type="checkbox" id="artist-pages-enabled" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Artist pages</label>
-                            <label class="flex items-center gap-2"><input type="checkbox" id="artist-external-links" class="rounded border-gray-600 bg-dark-700 text-accent"> Show external links (opens your browser)</label>
-                        </div>
-                    </div>
-                    <!-- Backup -->
-                    <div class="fb-srow fb-srow-stack">
-                        <div class="fb-srow-main">
-                            <div class="fb-srow-title">Backup</div>
-                            <div class="fb-srow-desc">Export bundles server config, browser preferences, and opted-in plugin data into one JSON file. Import overwrites current settings and reloads.</div>
-                        </div>
-                        <div class="fb-srow-control">
-                            <button onclick="exportSettings()" id="btn-export-settings" class="bg-dark-600 hover:bg-dark-500 px-5 py-2.5 rounded-xl text-sm text-gray-300 transition">Export Settings</button>
-                            <button onclick="document.getElementById('import-settings-file').click()" id="btn-import-settings" class="bg-dark-600 hover:bg-dark-500 px-5 py-2.5 rounded-xl text-sm text-gray-300 transition">Import Settings</button>
-                            <input type="file" id="import-settings-file" accept="application/json,.json" class="hidden" onchange="importSettings(this.files[0]); this.value=''">
-                            <span id="backup-status" class="text-xs text-gray-500"></span>
-                        </div>
-                    </div>
-                    <!-- Diagnostics -->
-                    <div class="fb-srow fb-srow-stack">
-                        <div class="fb-srow-main">
-                            <div class="fb-srow-title">Diagnostics</div>
-                            <div class="fb-srow-desc">Bundles server logs, hardware info, plugin inventory, and the browser console transcript into one zip for bug reports. Redaction strips DLC paths, song filenames, and IP addresses by default.</div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 mb-1 text-xs text-gray-400 fb-srow-wide">
-                            <label class="flex items-center gap-2"><input type="checkbox" id="diag-incl-system" checked class="rounded border-gray-600 bg-dark-700 text-accent"> System info</label>
-                            <label class="flex items-center gap-2"><input type="checkbox" id="diag-incl-hardware" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Hardware (CPU/GPU/RAM)</label>
-                            <label class="flex items-center gap-2"><input type="checkbox" id="diag-incl-logs" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Server logs (last 5 MB)</label>
-                            <label class="flex items-center gap-2"><input type="checkbox" id="diag-incl-console" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Browser console + errors</label>
-                            <label class="flex items-center gap-2"><input type="checkbox" id="diag-incl-plugins" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Plugin diagnostics</label>
-                            <label class="flex items-center gap-2"><input type="checkbox" id="diag-redact" checked class="rounded border-gray-600 bg-dark-700 text-accent"> Redact paths &amp; song names</label>
-                        </div>
-                        <div class="fb-srow-control">
-                            <button onclick="previewDiagnostics()" id="btn-diag-preview" class="bg-dark-600 hover:bg-dark-500 px-5 py-2.5 rounded-xl text-sm text-gray-300 transition">Preview Bundle</button>
-                            <button onclick="exportDiagnostics()" id="btn-diag-export" class="bg-dark-600 hover:bg-dark-500 px-5 py-2.5 rounded-xl text-sm text-gray-300 transition">Export Diagnostics</button>
-                            <span id="diag-status" class="text-xs text-gray-500"></span>
-                        </div>
-                        <div id="diag-preview" class="hidden mt-1 bg-dark-700 border border-gray-800 rounded-xl p-3 text-xs text-gray-400 max-h-96 overflow-auto fb-srow-wide"></div>
                     </div>
                     <!-- About -->
                     <div class="fb-srow fb-srow-stack">
                         <div class="fb-srow-main">
                             <div class="fb-srow-title">About</div>
                             <div class="fb-srow-desc">
-                                fee[dB]ack <span id="app-version-about" class="text-gray-500"></span> · Licensed under
-                                <a id="about-license-link" href="https://github.com/got-feedback/feedback/blob/main/LICENSE" target="_blank" rel="noopener" class="text-accent hover:text-accent-light underline">GNU AGPL v3.0</a> ·
-                                <a id="about-source-link" href="https://github.com/got-feedback/feedback" target="_blank" rel="noopener" class="text-accent hover:text-accent-light underline">Source code repository</a>.
-                                Free software — if you run a modified version that interacts with users over a network, you must make the modified source available to those users.
+                                RiffBoard <span id="app-version-about" class="text-gray-500"></span> · Licensed under
+                                <a id="about-license-link" href="https://github.com/Imdabossou/RiffBoard/blob/main/LICENSE" target="_blank" rel="noopener" class="text-accent hover:text-accent-light underline">GNU AGPL v3.0</a> ·
+                                <a id="about-source-link" href="https://github.com/Imdabossou/RiffBoard" target="_blank" rel="noopener" class="text-accent hover:text-accent-light underline">Source code</a>.
+                                Built on <a href="https://github.com/got-feedback/feedBack" target="_blank" rel="noopener" class="text-accent hover:text-accent-light underline">fee[dB]ack</a> by its contributors. Free software: anyone running a modified version for others must share its source.
                             </div>
                         </div>
                     </div>
@@ -1169,7 +920,7 @@
                     <span class="v3-pop-label">Guitar tone</span>
                     <select id="player-live-guitar-tone-source"
                         class="v3-pop-select max-w-[210px]">
-                        <option value="internal">fee[dB]ack internal tone</option>
+                        <option value="internal">RiffBoard internal tone</option>
                         <option value="external_hardware">External amp / hardware pedalboard</option>
                         <option value="spark_control_x">Spark LIVE + Spark Control X</option>
                     </select>
@@ -1286,60 +1037,28 @@
     <script defer src="/static/audio-mixer.js"></script>
     <script defer src="/static/vendor/shepherd.min.js"></script>
     <script defer src="/static/tour-engine.js"></script>
-    <!-- fee[dB]ack v0.3.0 shell: brand helper, then the shell (sidebar/topbar/
-         routing). Loaded after app.js/audio-mixer so window.showScreen and
-         window.feedBack(.audio) exist; dashboard.js is filled in prompt 13. -->
+    <!-- Shell: brand helper, then the shell (sidebar/topbar/routing). Loaded
+         after app.js/audio-mixer so window.showScreen and window.feedBack(.audio)
+         exist. -->
     <script defer src="/static/v3/brand.js"></script>
     <script defer src="/static/v3/shell.js"></script>
-    <!-- Progression (spec 010): theme-core before profile.js so the equipped
-         theme/avatar frame apply with the first badge render; progression-core
-         registers the `progression` capability owner + window.v3Progression. -->
-    <script defer src="/static/v3/theme-core.js"></script>
-    <script defer src="/static/v3/progression-core.js"></script>
     <script defer src="/static/v3/notifications.js"></script>
     <script defer src="/static/v3/gamepad.js"></script>
-    <script defer src="/static/v3/profile.js"></script>
-    <script defer src="/static/v3/progress.js"></script>
-    <script defer src="/static/v3/shop.js"></script>
     <script defer src="/static/v3/tuner-core.js"></script>
     <script defer src="/static/v3/badges.js"></script>
     <script defer src="/static/v3/stats-recorder.js"></script>
     <script defer src="/static/v3/live-performance-hud.js"></script>
     <script defer src="/static/v3/scoreboard-pref.js"></script>
-    <script defer src="/static/v3/venue-viz.js"></script>
-    <script defer src="/static/v3/venue-instrument-pov.js"></script>
-    <!-- venue-mood-fx must load before venue-scene-3d: the scene bridge reads
-         window.v3VenueMoodFx.getMotion() synchronously at boot when the saved
-         viz is 'venue'; loading it after falls back to 'subtle' and ignores a
-         saved 'off'/'full' motion preference on first paint. -->
-    <script defer src="/static/v3/venue-mood-fx.js"></script>
-    <script defer src="/static/v3/venue-scene-3d.js"></script>
-    <script defer src="/static/v3/venue-crowd.js"></script>
-    <script defer src="/static/v3/playlists.js"></script>
-    <script defer src="/static/v3/audio-routing.js"></script>
     <script defer src="/static/v3/live-guitar-tone-source.js"></script>
-    <script defer src="/static/v3/pedal-cables.js"></script>
-    <script defer src="/static/v3/plugins-page.js"></script>
-    <script defer src="/static/v3/card-actions-core.js"></script>
-    <!-- Before songs.js: the songs toolbar calls the match-review chip hook
-         on build, so the module must already be registered. -->
-    <script defer src="/static/v3/match-review.js"></script>
-    <!-- Before songs.js: the drawer art click + card ⋮ "Change cover…" open
-         the cover picker (window.__fbOpenImagePicker). -->
-    <script defer src="/static/v3/image-picker.js"></script>
     <script defer src="/static/v3/songs.js"></script>
     <script defer src="/static/v3/gamepad-nav.js"></script>
-    <script defer src="/static/v3/lessons.js"></script>
     <script defer src="/static/v3/dashboard.js"></script>
     <script defer src="/static/v3/settings.js"></script>
     <script defer src="/static/v3/interface-size-ui.js"></script>
-    <!-- First-run home tour: spotlights the home cards via the shared tour
-         engine (tour-engine.js, loaded above). Auto-runs once after onboarding
-         (triggered from profile.js finish()); replayable from the "?" menu. -->
-    <script defer src="/static/v3/onboarding-tour.js"></script>
     <script defer src="/static/v3/interface-size-nudge.js"></script>
-    <script defer src="/static/v3/feedbarcade.js"></script>
     <script defer src="/static/v3/player-chrome.js"></script>
+    <!-- RiffBoard: leaderboards screen, end-of-run name entry, about page. -->
+    <script defer src="/static/riffboard/leaderboard.js"></script>
     <!-- Detachable panes. The manager first; then the hosts, which register
          themselves with it; then the chip and the launcher, which drive it.
          pane-desktop only does anything inside the desktop app. -->

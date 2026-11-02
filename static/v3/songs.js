@@ -972,27 +972,11 @@
                 { id: '__charts', label: 'Charts (' + song.chart_count + ')…' },
                 { id: '__playver', label: 'Play version ▸' },
             ] : []),
-            // Undo for the drawer's "Split out" (P5e) — a split chart is its
-            // own singleton card (no ⚑ chip), so this is its only way back.
-            ...(state.provider === 'local' && song.is_split
-                ? [{ id: '__unsplit', label: 'Rejoin other versions' }] : []),
-            { id: '__playlist', label: 'Add to playlist' },
-            { id: '__save', label: 'Save for later' },
-            // Artist page (PR-B, entry point 1) — local library only (the
-            // page reads the local DB) and gated on the Settings toggle.
-            ...(state.provider === 'local' && song.artist && state.artistPagesEnabled !== false
-                ? [{ id: '__artist', label: 'Go to artist' }] : []),
+            { id: '__board', label: 'Leaderboard' },
             ...items.map((a) => ({ id: a.id, label: a.label, destructive: a.destructive, enabled: a.enabled, plugin: a.pluginId })),
-            // Metadata + file actions (R2) — local library only (they all
-            // address the local DB / filesystem). Both openers (⋮ and
-            // right-click) share this list, so parity is structural.
-            ...(state.provider === 'local' && song.filename ? [
-                { id: '__fixmatch', label: 'Fix metadata…' },
-                { id: '__cover', label: 'Change cover…' },
-                { id: '__refreshmeta', label: 'Refresh metadata' },
-                { id: '__getinfo', label: 'Get info…' },
-                { id: '__remove', label: 'Remove from library', destructive: true },
-            ] : []),
+            // RiffBoard: the library is read-only for visitors, so upstream's
+            // playlist / save / artist page / metadata / cover / remove actions
+            // are not offered.
         ];
         menu.innerHTML = rows.map((r) =>
             '<button data-act="' + esc(r.id) + '" class="w-full text-left px-3 py-1.5 hover:bg-fb-card/60 ' +
@@ -1025,6 +1009,7 @@
             closeMenu();
             if (id === '__play') { playCard(playTarget); return; }
             if (id === '__charts') { openChartsDrawer(song.work_key, song); return; }
+            if (id === '__board') { if (window.riffboardBoards) window.riffboardBoards.open(playTarget.filename, 0); return; }
             if (id === '__unsplit') {
                 if (await jsend('POST', '/api/chart/' + enc(song.filename) + '/unsplit')) _groupChanged();
                 return;
@@ -3828,7 +3813,12 @@
         // A library scan / DLC-folder change marked the grid stale — re-fetch
         // from scratch instead of restoring a cached (possibly empty, pre-DLC)
         // snapshot. Must win over every fast-path below.
-        if (_libraryDirty) { _libraryDirty = false; await reload(); return; }
+        // Only when the grid has been built once, though: a library:changed
+        // that lands before the first visit (e.g. the boot scan finishing)
+        // must fall through to the full render() below, since reload() only
+        // refills an existing grid.
+        if (_libraryDirty && state.built) { _libraryDirty = false; await reload(); return; }
+        _libraryDirty = false;
         // Keep the entry-point gates current (a Settings visit may have
         // toggled artist pages / external links). Fire-and-forget.
         refreshArtistPageGates();

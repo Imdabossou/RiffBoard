@@ -1,11 +1,10 @@
 /*
- * fee[dB]ack v0.3.0 — Dashboard / Home (#v3-home).
+ * RiffBoard — Home (#v3-home).
  *
- * Composes data from the backends built in other prompts: profile (15),
- * song-stats/recent (14), continue (16), library stats + plugins. Each widget
- * fetches + renders independently and DEGRADES GRACEFULLY — a missing/empty
- * endpoint shows a placeholder, never blocks first paint (design/05 §1).
- * Vanilla JS, fb-* tokens (constitution P-II).
+ * Hero + "continue / pick a song" card, a three-step "how it works" row, the
+ * newest songs, the current leaderboard toppers, and the visitor's own recent
+ * plays (kept in this browser by static/riffboard/local-api.js). Every widget
+ * fetches independently and degrades to a placeholder.
  */
 (function () {
     'use strict';
@@ -14,271 +13,166 @@
         { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const enc = encodeURIComponent;
     const jget = async (u) => { try { const r = await fetch(u); return r.ok ? r.json() : null; } catch (e) { return null; } };
+    const go = (id) => window.showScreen && window.showScreen(id);
 
-    function libArtUrl(song) {
+    function artUrl(song) {
         const v = song.mtime ? ('?v=' + Math.floor(song.mtime)) : '';
         return '/api/song/' + enc(song.filename) + '/art' + v;
     }
+    function art(url, cls) {
+        return '<img src="' + esc(url) + '" alt="" loading="lazy" class="' + (cls || '') +
+            '" onerror="this.style.visibility=\'hidden\'">';
+    }
 
-    // A random library song (for the "Pick a song" card when nothing's been played).
     async function randomSong() {
         const stats = await jget('/api/library/stats');
         const total = (stats && (stats.total_songs ?? stats.total)) || 0;
         if (!total) return null;
-        const idx = Math.floor(Math.random() * total);
-        const data = await jget('/api/library?size=1&page=' + idx);
+        const data = await jget('/api/library?size=1&page=' + Math.floor(Math.random() * total));
         return data && data.songs && data.songs[0] ? data.songs[0] : null;
     }
 
-    // Accuracy badge ramp (design/04-badges.md §C): ≥90% good, 50–89% mid, <50% low.
-    function accuracyBadge(acc) {
-        if (acc == null) return '';
-        // Floor, never round: 100% must mean every note hit.
-        const pct = Math.floor(acc * 100);
-        const color = acc >= 0.9 ? 'bg-fb-good' : (acc >= 0.5 ? 'bg-fb-mid' : 'bg-fb-low');
-        const text = acc >= 0.5 && acc < 0.9 ? 'text-black' : 'text-white';
-        return '<span class="absolute bottom-0 right-0 ' + color + '/90 ' + text +
-            ' px-2 py-1 rounded-tl-md text-xs font-bold flex items-center gap-1">' +
-            '<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>' +
-            pct + '%</span>';
+    function songTile(song, attrs) {
+        return '<button ' + attrs + ' class="group text-left">' +
+            '<div class="relative aspect-square rounded-lg overflow-hidden bg-fb-card border border-fb-border/50">' +
+            art(song.art_url || artUrl(song), 'w-full h-full object-cover group-hover:scale-105 transition-transform') +
+            '</div>' +
+            '<div class="mt-2 text-sm font-semibold text-fb-text truncate">' + esc(song.title || song.filename) + '</div>' +
+            '<div class="text-xs text-fb-textDim truncate">' + esc(song.artist || '') + '</div></button>';
     }
 
-    function songArt(url, extra) {
-        return '<img src="' + esc(url) + '" alt="" class="' + (extra || '') +
-            '" onerror="this.style.visibility=\'hidden\'">';
+    function step(n, title, body) {
+        return '<div class="bg-fb-card/80 rounded-lg p-5 border border-fb-border/50">' +
+            '<div class="w-8 h-8 rounded-full bg-fb-primary/20 text-fb-primary font-bold flex items-center justify-center">' + n + '</div>' +
+            '<div class="mt-3 font-semibold text-fb-text">' + title + '</div>' +
+            '<div class="mt-1 text-sm text-fb-textDim">' + body + '</div></div>';
     }
 
-    function tuningChip(name, cls) {
-        if (!name) return '';
-        return '<span class="' + (cls || '') + ' bg-fb-mid text-black text-xs font-bold px-2 py-1 rounded-sm">' + esc(name) + '</span>';
-    }
-
-    // Source format of a song — prefer the server's `format`, fall back to the
-    // filename extension. '' = unknown.
-    function fmtName(song) {
-        let f = ((song && song.format) || '').toLowerCase();
-        if (!f) {
-            const fn = ((song && song.filename) || '').toLowerCase();
-            f = (fn.endsWith('.feedpak') || fn.endsWith('.sloppak')) ? 'sloppak' : '';
-        }
-        return f === 'sloppak' ? 'FEEDPAK' : f === 'loose' ? 'FOLDER' : '';
-    }
-    // Corner badge for art-thumbnail cards (sloppak accented, others muted).
-    function fmtBadge(song) {
-        const l = fmtName(song);
-        if (!l) return '';
-        const c = l === 'FEEDPAK' ? 'bg-fb-primary text-white' : 'bg-black/70 text-fb-textDim';
-        return '<span class="absolute bottom-0 left-0 ' + c + ' text-[0.5625rem] font-bold px-1.5 py-0.5 rounded-tr-md tracking-wide">' + l + '</span>';
-    }
-    // Inline pill for the hero (Pick/Continue) card, where the art is text-overlaid
-    // and a corner badge would collide — sits next to the card's label instead.
-    function fmtTag(song) {
-        const l = fmtName(song);
-        if (!l) return '';
-        const c = l === 'FEEDPAK' ? 'bg-fb-primary/20 text-fb-primary' : 'bg-fb-card/80 text-fb-textDim';
-        return '<span class="' + c + ' text-[0.5625rem] font-bold px-1.5 py-0.5 rounded tracking-wide shrink-0">' + l + '</span>';
-    }
-
-    // ── Continue-Playing resume ──────────────────────────────────────────---
-    function resume(filename, lastPosition, arrangement) {
-        if (typeof window.playSong !== 'function') return;
-        // playSong expects an encoded filename (it decodeURIComponent()s it for
-        // the highway WS) and takes the arrangement index as its 2nd arg — pass
-        // both so resume reopens the exact arrangement the user left, not the
-        // default. It has no start-time arg, so play then best-effort seek once
-        // the session is up (constitution: highway WS).
-        Promise.resolve(window.playSong(enc(filename), arrangement)).then(() => {
-            if (Number.isFinite(lastPosition) && lastPosition > 0 && sm && typeof sm.seek === 'function') {
-                setTimeout(() => { try { sm.seek(lastPosition, 'continue-playing'); } catch (e) { /* */ } }, 800);
-            }
-        });
-    }
-
-    // ── Render ───────────────────────────────────────────────────────────---
+    let renderSeq = 0;
     async function render() {
         const root = document.getElementById('v3-home');
         if (!root) return;
-
-        // Kick off independent fetches.
-        const [profile, version, cont, libStats, plugins, recent] = await Promise.all([
-            jget('/api/profile'), jget('/api/version'), jget('/api/session/continue'),
-            jget('/api/library/stats'), jget('/api/plugins'), jget('/api/stats/recent?limit=6'),
+        const seq = ++renderSeq;
+        const [cont, latest, boards, recent, stats] = await Promise.all([
+            jget('/api/session/continue'),
+            jget('/api/library?size=8&sort=recent'),
+            jget('/api/leaderboards'),
+            jget('/api/stats/recent?limit=6'),
+            jget('/api/library/stats'),
         ]);
-
-        const name = (profile && profile.display_name) || 'there';
-        const ver = (version && version.version) || '';
-        const changelogUrl = ((version && version.source_url) || 'https://github.com/got-feedback/feedBack') + '/blob/main/CHANGELOG.md';
-        const songCount = (libStats && (libStats.total_songs ?? libStats.total)) || 0;
-        const pluginCount = Array.isArray(plugins)
-            ? plugins.filter((p) => (p && (p.status || 'ready') === 'ready')).length : 0;
-
-        // "Jump back in": scored recents, else fall back to recently-added songs
-        // so the section is never empty on a fresh profile.
-        let recentList = Array.isArray(recent) ? recent : [];
-        if (!recentList.length) {
-            const lib = await jget('/api/library?sort=recent&size=6&page=0');
-            recentList = ((lib && lib.songs) || []).map((s) => ({
-                filename: s.filename, title: s.title, artist: s.artist,
-                art_url: libArtUrl(s), best_accuracy: null,
-            }));
-        }
-        // When nothing's been played, the Continue card becomes a random
-        // pick-a-song that plays on click.
         const pick = (cont && cont.filename) ? null : await randomSong();
+        if (seq !== renderSeq) return;
+        const songCount = (stats && (stats.total_songs ?? stats.total)) || 0;
 
-        // Continue card.
-        let continueCard;
+        let sideCard;
         if (cont && cont.filename) {
-            const dur = cont.duration || 0;
-            const segs = 4;
-            const filled = dur > 0 ? Math.round((cont.last_position / dur) * segs) : 0;
-            const bars = Array.from({ length: segs }, (_, i) =>
-                '<span class="flex-1 h-1.5 rounded-full ' + (i < filled ? 'bg-fb-primary' : 'bg-gray-500/40') + '"></span>').join('');
-            continueCard =
-                '<button id="v3-continue" data-tour="continue" class="group relative text-left rounded-xl overflow-hidden border border-fb-border/50 bg-fb-card aspect-square self-start flex flex-col justify-end">' +
-                songArt(cont.art_url, 'absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-70 transition') +
-                '<div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>' +
-                tuningChip(cont.tuning_name, 'absolute top-3 right-3') +
-                '<div class="relative p-4">' +
-                '<div class="flex items-center justify-between gap-2 mb-1"><span class="text-xs uppercase tracking-wider text-fb-textDim">Continue Playing</span>' + fmtTag(cont) + '</div>' +
-                '<div class="text-fb-text font-bold truncate">' + esc(cont.title) + '</div>' +
-                '<div class="text-sm text-fb-textDim truncate mb-3">' + esc(cont.artist) + '</div>' +
-                '<div class="flex gap-1">' + bars + '</div></div>' +
-                '<span class="absolute top-3 left-3 text-fb-text/80 group-hover:text-fb-text">▶</span></button>';
+            sideCard = '<button id="rb-continue" class="rb-on-dark group relative text-left rounded-xl overflow-hidden border border-fb-border/50 bg-fb-card aspect-square self-start flex flex-col justify-end">' +
+                art(cont.art_url, 'absolute inset-0 w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity') +
+                '<div class="relative p-5 bg-gradient-to-t from-black/90 to-transparent">' +
+                '<div class="text-xs uppercase tracking-wider text-fb-primaryHi font-semibold">Continue playing</div>' +
+                '<div class="text-xl font-bold text-white mt-1">' + esc(cont.title) + '</div>' +
+                '<div class="text-sm text-gray-300">' + esc(cont.artist) + '</div></div></button>';
         } else if (pick) {
-            continueCard =
-                '<button id="v3-pick" data-tour="continue" data-fn="' + esc(pick.filename) + '" class="group relative text-left rounded-xl overflow-hidden border border-fb-border/50 bg-fb-card aspect-square self-start flex flex-col justify-end">' +
-                songArt(libArtUrl(pick), 'absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-70 transition') +
-                '<div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>' +
-                tuningChip(pick.tuning_name, 'absolute top-3 right-3') +
-                '<div class="relative p-4">' +
-                '<div class="flex items-center justify-between gap-2 mb-1"><span class="text-xs uppercase tracking-wider text-fb-textDim">Pick a song</span>' + fmtTag(pick) + '</div>' +
-                '<div class="text-fb-text font-bold truncate">' + esc(pick.title) + '</div>' +
-                '<div class="text-sm text-fb-textDim truncate">' + esc(pick.artist) + '</div></div>' +
-                '<span class="absolute top-3 left-3 text-fb-text/80 group-hover:text-fb-text">▶</span></button>';
+            sideCard = '<button id="rb-pick" class="rb-on-dark group relative text-left rounded-xl overflow-hidden border border-fb-border/50 bg-fb-card aspect-square self-start flex flex-col justify-end">' +
+                art(artUrl(pick), 'absolute inset-0 w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity') +
+                '<div class="relative p-5 bg-gradient-to-t from-black/90 to-transparent">' +
+                '<div class="text-xs uppercase tracking-wider text-fb-primaryHi font-semibold">Try this one</div>' +
+                '<div class="text-xl font-bold text-white mt-1">' + esc(pick.title) + '</div>' +
+                '<div class="text-sm text-gray-300">' + esc(pick.artist) + '</div></div></button>';
         } else {
-            continueCard =
-                '<div data-tour="continue" class="rounded-xl border border-fb-border/50 bg-fb-card/60 aspect-square self-start flex flex-col items-center justify-center text-center p-4">' +
-                '<div class="text-fb-textDim text-sm mb-3">Pick a song to get started</div>' +
-                '<button id="v3-continue-pick" class="bg-fb-card hover:bg-fb-card/70 border border-fb-border/50 text-fb-text text-sm px-4 py-2 rounded-md">Browse library</button></div>';
+            sideCard = '<div class="rounded-xl border border-fb-border/50 bg-fb-card/60 aspect-square self-start flex flex-col items-center justify-center text-center p-6">' +
+                '<div class="text-fb-textDim text-sm">No songs yet. Check back soon!</div></div>';
         }
 
-        // Recently played.
-        let recentSection;
-        if (recentList.length) {
-            const cards = recentList.map((r) =>
-                '<button data-recent="' + esc(r.filename) + '" data-arr="' + esc(r.arrangement != null ? r.arrangement : '') + '" class="group text-left">' +
-                '<div class="relative aspect-square rounded-lg overflow-hidden bg-fb-card">' +
-                songArt(r.art_url, 'w-full h-full object-cover transition-transform duration-300 group-hover:scale-105') +
-                accuracyBadge(r.best_accuracy) + fmtBadge(r) + '</div>' +
-                '<div class="mt-1 text-sm text-fb-text truncate">' + esc(r.title) + '</div>' +
-                '<div class="text-xs text-fb-textDim truncate">' + esc(r.artist) + '</div></button>').join('');
-            recentSection =
-                '<section class="mt-10"><h3 class="text-2xl font-bold text-fb-text mb-4">Jump back in!</h3>' +
-                '<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">' + cards + '</div></section>';
-        } else {
-            recentSection =
-                '<section class="mt-10"><h3 class="text-2xl font-bold text-fb-text mb-4">Jump back in!</h3>' +
-                '<p class="text-fb-textDim text-sm">Play a song to see it here.</p></section>';
-        }
+        const latestSongs = (latest && latest.songs) || [];
+        const latestSection = latestSongs.length
+            ? '<h2 class="text-xl font-bold text-fb-text mt-10 mb-4">Newest songs</h2>' +
+              '<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">' +
+              latestSongs.map((s) => songTile(s, 'data-play="' + esc(s.filename) + '"')).join('') + '</div>'
+            : '';
+
+        const topBoards = ((boards && boards.boards) || []).slice().sort((a, b) => b.runs - a.runs).slice(0, 5);
+        const boardSection = topBoards.length
+            ? '<div class="flex items-center justify-between mt-10 mb-4"><h2 class="text-xl font-bold text-fb-text">Top of the boards</h2>' +
+              '<button id="rb-all-boards" class="text-sm text-fb-primary hover:text-fb-primaryHi">All leaderboards</button></div>' +
+              '<div class="bg-fb-card/80 rounded-lg border border-fb-border/50 divide-y divide-fb-border/50">' +
+              topBoards.map((b) =>
+                  '<button data-board="' + esc(b.filename) + '" data-arr="' + b.arrangement + '" class="w-full flex items-center gap-4 p-3 text-left hover:bg-fb-card">' +
+                  art(b.art_url, 'w-12 h-12 rounded object-cover bg-fb-cardMuted') +
+                  '<div class="min-w-0 flex-1"><div class="font-semibold text-fb-text truncate">' + esc(b.title) +
+                  (b.arrangement_name ? ' <span class="text-xs text-fb-textDim font-normal">· ' + esc(b.arrangement_name) + '</span>' : '') + '</div>' +
+                  '<div class="text-xs text-fb-textDim truncate">' + esc(b.artist) + '</div></div>' +
+                  '<div class="text-right shrink-0"><div class="text-fb-gold font-bold">' + Number(b.top_score).toLocaleString() + '</div>' +
+                  '<div class="text-xs text-fb-textDim">' + esc(b.top_name) + '</div></div></button>').join('') +
+              '</div>'
+            : '';
+
+        const recentRows = Array.isArray(recent) ? recent : [];
+        const recentSection = recentRows.length
+            ? '<h2 class="text-xl font-bold text-fb-text mt-10 mb-4">Jump back in</h2>' +
+              '<div class="grid grid-cols-3 sm:grid-cols-6 gap-4">' +
+              recentRows.map((r) => songTile(r, 'data-play="' + esc(r.filename) + '" data-arr="' + (r.arrangement ?? '') + '"')).join('') + '</div>'
+            : '';
 
         root.innerHTML =
-            '<div class="max-w-7xl mx-auto px-6 md:px-8 pb-8">' +
-            // (Title "Welcome back, {name}!" lives in the topbar header row.)
-            (ver ? '<p class="text-sm text-fb-textDim">Have you read the latest changes in the ' +
-                '<a href="' + esc(changelogUrl) + '" target="_blank" rel="noopener" class="text-fb-primary hover:text-fb-primaryHi">Patch Notes for ' + esc(ver) + '</a>?</p>' : '') +
-            // Featured grid: hero + continue
-            '<div class="grid lg:grid-cols-3 gap-6 mt-6">' +
-            '<div id="v3-hero" class="lg:col-span-2 relative rounded-xl overflow-hidden min-h-[480px] flex items-center bg-fb-bg">' +
-            // Hero artwork (neon note-highway), right-anchored. Placeholder
-            // cropped from the design mock — swap static/v3/brand/hero.png for
-            // the designer's high-res original (same path) when available.
-            '<img src="/static/v3/brand/hero.png" alt="" aria-hidden="true" ' +
-            'class="absolute inset-y-0 right-0 h-full w-2/3 object-cover object-right" ' +
-            'onerror="this.style.display=\'none\'">' +
-            // 135° gradient overlay: solid navy on the left for text legibility,
-            // fading to transparent so the artwork shows through on the right.
-            '<div class="absolute inset-0" style="background-image:linear-gradient(135deg,#0f172a 0%,#0f172a 40%,rgba(15,23,42,0.55) 65%,rgba(15,23,42,0.15) 100%);"></div>' +
-            '<div class="relative p-8 max-w-md">' +
-            '<h3 class="text-4xl font-bold leading-tight text-fb-text">Turn any song into practice.</h3>' +
-            '<p class="text-fb-textDim mt-2">Play along to your library, track your accuracy, and rank up.</p>' +
-            '<div class="flex gap-3 mt-5">' +
-            '<button id="v3-start" class="bg-fb-primary hover:bg-fb-primaryHi text-white px-6 py-2 rounded-md font-medium shadow-lg shadow-fb-primary/20">Start Playing</button>' +
-            '<button id="v3-lessons-btn" class="bg-transparent border border-fb-textDim hover:border-white text-white px-6 py-2 rounded-md font-medium">Lessons</button>' +
-            '</div></div></div>' +
-            continueCard +
+            '<div class="max-w-7xl mx-auto px-4 md:px-8 pb-12">' +
+            '<div class="grid lg:grid-cols-3 gap-6">' +
+            '<div class="rb-on-dark lg:col-span-2 relative rounded-xl overflow-hidden min-h-[360px] md:min-h-[440px] flex items-center bg-fb-bg">' +
+            '<img src="/static/v3/brand/hero.png" alt="" aria-hidden="true" class="absolute inset-y-0 right-0 h-full w-2/3 object-cover object-right" onerror="this.style.display=\'none\'">' +
+            '<div class="absolute inset-0 rb-hero-fade"></div>' +
+            '<div class="relative p-6 md:p-8 max-w-md">' +
+            '<h3 class="text-3xl md:text-4xl font-bold leading-tight text-white">Play along. Top the board.</h3>' +
+            '<p class="text-gray-300 mt-3">Original songs from independent artists, charted for guitar and bass. Plug in or use your mic, play the whole song, and post your score.</p>' +
+            '<div class="flex flex-wrap gap-3 mt-6">' +
+            '<button id="rb-start" class="bg-fb-primary hover:bg-fb-primaryHi text-white px-6 py-2.5 rounded-md font-medium shadow-lg shadow-fb-primary/20">Start playing</button>' +
+            '<button id="rb-boards" class="border border-gray-400 hover:border-white text-white px-6 py-2.5 rounded-md font-medium">Leaderboards</button>' +
             '</div>' +
-            // Stats row. The third slot belongs to the career plugin (it
-            // replaces the slot's content on v3:dashboard-rendered); the
-            // plugin-count stat is the built-in fallback when career is
-            // absent or has no state yet.
-            '<div class="grid md:grid-cols-3 gap-6 mt-6">' +
-            audioRoutingCard() +
-            statCard(String(songCount), 'songs', 'text-fb-gold') +
-            '<div id="v3-dash-career-slot" class="grid">' +
-            statCard(String(pluginCount), 'active', 'text-fb-good') +
+            (songCount ? '<p class="text-xs text-gray-400 mt-4">' + songCount + ' song' + (songCount === 1 ? '' : 's') + ' to play</p>' : '') +
+            '</div></div>' +
+            sideCard +
             '</div>' +
+            '<div class="grid md:grid-cols-3 gap-4 mt-6">' +
+            step(1, 'Pick a song', 'Browse the library and choose a part: lead, rhythm or bass.') +
+            step(2, 'Plug in', 'Use an audio interface or your mic. <button id="rb-setup" class="text-fb-primary hover:text-fb-primaryHi">Set up your input</button> once and it\'s remembered on this device.') +
+            step(3, 'Post your score', 'Play the whole song at full speed and enter your name to land on the leaderboard.') +
             '</div>' +
-            recentSection +
+            recentSection + latestSection + boardSection +
             '</div>';
 
-        // Wire interactions.
-        const startBtn = root.querySelector('#v3-start');
-        if (startBtn) startBtn.addEventListener('click', () => {
-            if (cont && cont.filename) resume(cont.filename, cont.last_position, cont.arrangement);
-            else if (pick) window.playSong && window.playSong(enc(pick.filename));
-            else window.showScreen && window.showScreen('v3-songs');
+        root.querySelector('#rb-start')?.addEventListener('click', () => {
+            if (cont && cont.filename) resume(cont);
+            else go('v3-songs');
         });
-        root.querySelector('#v3-continue')?.addEventListener('click', () => resume(cont.filename, cont.last_position, cont.arrangement));
-        root.querySelector('#v3-pick')?.addEventListener('click', () => window.playSong && window.playSong(enc(pick.filename)));
-        root.querySelector('#v3-continue-pick')?.addEventListener('click', () => window.showScreen && window.showScreen('v3-songs'));
-        root.querySelector('#v3-lessons-btn')?.addEventListener('click', () => window.showScreen && window.showScreen('v3-lessons'));
-        root.querySelectorAll('[data-recent]').forEach((b) =>
-            b.addEventListener('click', () => {
-                if (!window.playSong) return;
-                // /api/stats/recent rows are arrangement-specific — reopen the
-                // arrangement that was actually played, not the default.
-                const arr = b.getAttribute('data-arr');
-                window.playSong(enc(b.getAttribute('data-recent')), arr === '' || arr == null ? undefined : Number(arr));
-            }));
-
-        // Let prompt 18 enhance the audio-routing card once it exists.
-        if (window.v3AudioRouting && typeof window.v3AudioRouting.render === 'function') {
-            try { window.v3AudioRouting.render(document.getElementById('v3-audio-routing')); } catch (e) { /* */ }
-        }
-        // Signal that #v3-home has been (re)built, so the first-run onboarding
-        // tour can wait for the real cards instead of attaching to nodes from a
-        // prior render that this innerHTML swap just replaced.
-        try { document.dispatchEvent(new CustomEvent('v3:dashboard-rendered')); } catch (e) { /* older runtimes */ }
+        root.querySelector('#rb-boards')?.addEventListener('click', () => go('v3-leaderboards'));
+        root.querySelector('#rb-all-boards')?.addEventListener('click', () => go('v3-leaderboards'));
+        root.querySelector('#rb-setup')?.addEventListener('click', () => {
+            go('settings');
+            setTimeout(() => document.querySelector('#settings-tabbar [data-tab="mic"]')?.click(), 50);
+        });
+        root.querySelector('#rb-continue')?.addEventListener('click', () => resume(cont));
+        root.querySelector('#rb-pick')?.addEventListener('click', () => window.playSong && window.playSong(enc(pick.filename)));
+        root.querySelectorAll('[data-play]').forEach((b) => b.addEventListener('click', () => {
+            if (!window.playSong) return;
+            const arr = b.getAttribute('data-arr');
+            window.playSong(enc(b.getAttribute('data-play')), arr === '' || arr == null ? undefined : Number(arr));
+        }));
+        root.querySelectorAll('[data-board]').forEach((b) => b.addEventListener('click', () => {
+            if (window.riffboardBoards) window.riffboardBoards.open(b.getAttribute('data-board'), Number(b.getAttribute('data-arr')));
+        }));
+        if (sm && typeof sm.emit === 'function') sm.emit('v3:dashboard-rendered', {});
     }
 
-    function statCard(value, unit, unitColor) {
-        return '<div class="bg-fb-card/80 backdrop-blur rounded-lg p-4 border border-fb-border/50 flex flex-col justify-center">' +
-            '<div class="text-2xl font-bold text-fb-text">' + esc(value) +
-            ' <span class="text-sm font-medium ' + unitColor + '">' + esc(unit) + '</span></div></div>';
-    }
-
-    // Audio-routing widget placeholder (prompt 18 replaces #v3-audio-routing's
-    // body via window.v3AudioRouting). Until then: "Not Connected".
-    function audioRoutingCard() {
-        return '<div id="v3-audio-routing" class="bg-fb-card/80 backdrop-blur rounded-lg p-4 border border-fb-border/50">' +
-            '<div class="flex items-center justify-between text-xs text-fb-textDim mb-2"><span>Audio Routing</span></div>' +
-            '<div class="flex items-center gap-2 text-xs text-fb-textDim">' +
-            '<span>Input</span><span class="flex-1 border-t border-dashed border-fb-border"></span>' +
-            '<span class="w-2 h-2 rounded-full bg-gray-500"></span>' +
-            '<span>VST/NAM/IR</span><span class="flex-1 border-t border-dashed border-fb-border"></span>' +
-            '<span class="w-2 h-2 rounded-full bg-gray-500"></span><span>Output</span></div>' +
-            '<div class="mt-2 text-sm font-medium text-fb-textDim">Not Connected</div></div>';
+    function resume(cont) {
+        if (!window.playSong) return;
+        const opts = cont.last_position > 0 ? { resume: { position: cont.last_position } } : undefined;
+        window.playSong(enc(cont.filename), cont.arrangement, opts);
     }
 
     window.v3Dashboard = { render: render };
     if (sm && typeof sm.on === 'function') {
         sm.on('screen:changed', (e) => { if (e && e.detail && e.detail.id === 'v3-home') render(); });
-        sm.on('v3:profile-updated', () => render());
     }
     function boot() { render(); }
-    // `defer` runs this at readyState 'interactive' — later scripts have not
-    // evaluated yet, so wait for DOMContentLoaded (see static/v3/index.html).
     if (document.readyState !== 'complete') document.addEventListener('DOMContentLoaded', boot, { once: true });
     else boot();
 })();

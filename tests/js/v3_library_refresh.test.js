@@ -39,6 +39,12 @@ test('onV3SongsScreenEnter forces a reload when the library is dirty', () => {
     assert.ok(m, 'onV3SongsScreenEnter present');
     // The dirty check must short-circuit to a reload before the cached-DOM
     // fast-paths get a chance to restore the stale grid.
-    assert.match(SONGS, /if\s*\(_libraryDirty\)\s*\{[^}]*reload\(\)[^}]*return;/,
+    assert.match(SONGS, /if\s*\(_libraryDirty && state\.built\)\s*\{[^}]*reload\(\)[^}]*return;/,
         'a dirty library must force a full reload on entry, ahead of any fast-path');
+    // ...but only once the grid exists: a library:changed before the first
+    // visit (the boot scan) must fall through to the full render(), since
+    // reload() only refills an existing grid (RiffBoard fix: the Songs screen
+    // used to stay empty on its first visit).
+    assert.match(SONGS, /_libraryDirty = false;\s*\n\s*\/\/ Keep the entry-point gates current/,
+        'a pre-build dirty flag is cleared and the normal render path runs');
 });

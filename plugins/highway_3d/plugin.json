@@ -6,7 +6,9 @@
     "bundled": true,
     "script": "screen.js",
     "styles": "assets/plugin.css",
-    "settings": { "html": "settings.html", "category": "graphics", "server_files": ["plugin_uploads/highway_3d/current.mp4", "plugin_uploads/highway_3d/current.webm"] },
-    "routes": "routes.py",
+    "settings": {
+        "html": "settings.html",
+        "category": "graphics"
+    },
     "tour": "tour.json"
 }

@@ -1,5 +1,5 @@
 /*
- * fee[dB]ack v0.3.0 — brand helpers.
+ * RiffBoard brand helpers (from fee[dB]ack v0.3.0).
  *
  * Single source for the wordmark so the sidebar, topbar (prompt 12), modals
  * and onboarding (prompt 15) render it identically. The `[dB]` is a literal
@@ -11,11 +11,10 @@
 
     // Inner markup of the wordmark (no wrapper element) so callers can choose
     // the tag/size. `fee` + `ack` use the primary text color; `[dB]` is sky.
-    const WORDMARK_INNER =
-        'fee<span class="text-fb-primary">[dB]</span>ack';
+    const WORDMARK_INNER = 'Riff<span class="text-fb-primary">Board</span>';
 
     /**
-     * Returns the styled fee[dB]ack wordmark as an HTML string.
+     * Returns the styled RiffBoard wordmark as an HTML string.
      * @param {Object} [opts]
      * @param {string} [opts.size='text-xl'] Tailwind text-size utility.
      * @param {boolean} [opts.mono=false]    Monochrome (single color, keeps
@@ -27,7 +26,7 @@
         opts = opts || {};
         const size = opts.size || 'text-xl';
         const extra = opts.extra || '';
-        const inner = opts.mono ? 'fee[dB]ack' : WORDMARK_INNER;
+        const inner = opts.mono ? 'RiffBoard' : WORDMARK_INNER;
         return '<span class="font-extrabold tracking-tight text-fb-text ' +
             size + ' ' + extra + '">' + inner + '</span>';
     }
@@ -41,7 +40,7 @@
     window.fbBrand = {
         wordmarkHTML: wordmarkHTML,
         renderWordmark: renderWordmark,
-        WORDMARK_SVG: '/static/v3/brand/feedback-wordmark.svg',
+        ICON_SVG: '/static/v3/brand/riffboard-icon.svg',
         FAVICON_SVG: '/static/v3/brand/favicon.svg',
     };
 })();

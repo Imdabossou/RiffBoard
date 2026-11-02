@@ -11,7 +11,6 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const BADGES = fs.readFileSync(path.join(ROOT, 'static', 'v3', 'badges.js'), 'utf8');
-const TOUR = fs.readFileSync(path.join(ROOT, 'static', 'v3', 'onboarding-tour.js'), 'utf8');
 
 test('instrument selector offers a Handedness Right/Left choice', () => {
     assert.match(BADGES, /instRow\('Handedness'/, 'a Handedness row must be in the instrument menu');
@@ -38,10 +37,4 @@ test('_leftyPref reads highway.getLefty with a localStorage fallback', () => {
         BADGES,
         /function _leftyPref\(\)\s*\{[\s\S]*?getLefty[\s\S]*?localStorage\.getItem\('lefty'\)/,
         '_leftyPref reads the current handedness with a storage fallback');
-});
-
-test('onboarding instrument step calls out left-handed players + the Handedness control', () => {
-    assert.match(TOUR, /Choose your instrument/);
-    assert.match(TOUR, /left-handed/i, 'the instrument step must call out left-handed players');
-    assert.match(TOUR, /Handedness/, 'and name the Handedness control');
 });
