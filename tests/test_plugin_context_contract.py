@@ -1,4 +1,7 @@
-"""The plugin context is a THIRD-PARTY CONTRACT. Pin it.
+"""The plugin context is a plugin-facing contract. Pin it.
+
+RiffBoard ships only in-tree plugins, so the XP, progression, demo-janitor and
+art-cache keys upstream exposed were dropped along with those features.
 
 `context` is handed to every plugin's `setup()`. Plugins — including ones we don't ship
 and can't grep — read keys out of it and hold the callables as live references. Issue #48
@@ -37,19 +40,12 @@ BASE_CONTEXT_KEYS = {
     "extract_meta",
     "meta_db",
     "get_scan_status",
-    "get_art_cache_dir",
     "library_providers",
     "register_library_provider",
     "unregister_library_provider",
     "register_tuning_provider",
     "unregister_tuning_provider",
     "get_sloppak_cache_dir",
-    "register_demo_janitor_hook",
-    "award_xp",
-    "get_xp_progress",
-    "seed_xp",
-    "reset_xp",
-    "record_progression_event",
 }
 
 # Added PER PLUGIN by plugins/__init__.py on top of the base — so the surface a plugin

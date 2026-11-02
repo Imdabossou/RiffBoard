@@ -55,12 +55,9 @@ REPO = Path(__file__).resolve().parent.parent
 # file here is a hard error too, so a rename cannot silently disable the scan.
 READERS = [
     "lib/sloppak.py",
-    "lib/enrichment.py",
     "lib/songmeta.py",
-    "lib/gp2notation.py",        # rewrites manifest.yaml; stamps feedpak_version
     "lib/routers/ws_highway.py", # reads `authors` off a feedpak manifest
-    "lib/routers/chart.py",      # Get-info panel: binds `m = load_manifest(...)`
-    "lib/routers/song.py",       # enrichment gap-fill: reads the manifest directly
+    "lib/routers/song.py",       # reads the manifest for the stems payload
 ]
 
 # Where check_readers_complete() looks for modules READERS may have missed.

@@ -227,10 +227,6 @@ def test_registered_provider_handles_library_endpoints(server_mod, client):
     assert art.headers["content-type"].startswith("image/png")
     assert provider.art_song_id == "remote-song-id"
 
-    synced = client.post("/api/library/providers/remote:frodo/songs/remote-song-id/sync").json()
-    assert synced == {"ok": True, "filename": "synced.archive", "song_id": "remote-song-id"}
-    assert provider.sync_song_id == "remote-song-id"
-
 
 def test_unknown_library_provider_returns_404(server_mod, client):
     response = client.get("/api/library", params={"provider": "missing"})
@@ -238,16 +234,12 @@ def test_unknown_library_provider_returns_404(server_mod, client):
     assert "Unknown library provider" in response.json()["detail"]
 
 
-def test_provider_art_and_sync_report_unsupported_when_missing(server_mod, client):
+def test_provider_art_reports_unsupported_when_missing(server_mod, client):
     server_mod.register_library_provider(ReadOnlyLibraryProvider())
 
     art = client.get("/api/library/providers/remote:readonly/songs/remote-song-id/art")
     assert art.status_code == 501
     assert "does not declare capability 'art.read'" in art.json()["detail"]
-
-    synced = client.post("/api/library/providers/remote:readonly/songs/remote-song-id/sync")
-    assert synced.status_code == 501
-    assert "does not declare capability 'song.sync'" in synced.json()["detail"]
 
 
 def test_library_read_endpoints_require_library_read_capability(server_mod, client):

@@ -21,7 +21,7 @@ def _close_server_dbs(mod):
     if conn is not None:
         getattr(mod, "_join_background_db_threads", lambda: None)()
         conn.close()
-    ae_conn = getattr(getattr(mod, "audio_effect_mappings", None), "conn", None)
+    ae_conn = getattr(getattr(mod, "leaderboard", None), "conn", None)
     if ae_conn is not None:
         ae_conn.close()
 
@@ -40,7 +40,7 @@ def isolated_server(tmp_path, monkeypatch):
     leaving `appstate.meta_db` published but pointing at a closed sqlite handle
     would hand a later test (or router) a live-looking, dead singleton.
     """
-    previous = (appstate.meta_db, appstate.audio_effect_mappings)
+    previous = (appstate.meta_db, appstate.leaderboard)
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     sys.modules.pop("server", None)
     mod = importlib.import_module("server")
@@ -48,7 +48,7 @@ def isolated_server(tmp_path, monkeypatch):
     _close_server_dbs(mod)
     # Leave no half-torn-down `server` behind: the next fixture re-imports it.
     sys.modules.pop("server", None)
-    appstate.configure(meta_db=previous[0], audio_effect_mappings=previous[1])
+    appstate.configure(meta_db=previous[0], leaderboard=previous[1])
 
 
 def test_import_is_side_effect_free():
@@ -63,7 +63,7 @@ def test_import_is_side_effect_free():
     fresh = importlib.import_module("appstate")
     try:
         assert fresh.meta_db is None
-        assert fresh.audio_effect_mappings is None
+        assert fresh.leaderboard is None
     finally:
         sys.modules["appstate"] = appstate
 
@@ -120,7 +120,7 @@ def test_server_wires_the_seam(isolated_server):
     fails here rather than in some router months later.
     """
     assert appstate.meta_db is isolated_server.meta_db
-    assert appstate.audio_effect_mappings is isolated_server.audio_effect_mappings
+    assert appstate.leaderboard is isolated_server.leaderboard
     assert appstate.meta_db is not None
 
 
@@ -147,7 +147,7 @@ def test_reimporting_server_republishes_the_fresh_singletons(
         assert second_server.meta_db is not first_db          # genuinely rebuilt
         assert str(second_config) in second_server.meta_db.db_path
         assert appstate.meta_db is second_server.meta_db      # ...and re-published
-        assert appstate.audio_effect_mappings is second_server.audio_effect_mappings
+        assert appstate.leaderboard is second_server.leaderboard
     finally:
         _close_server_dbs(second_server)
         sys.modules.pop("server", None)

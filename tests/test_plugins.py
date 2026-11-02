@@ -3050,15 +3050,6 @@ def test_list_plugins_exposes_profile_domain_manifest_metadata(tmp_path, reset_p
         client.close()
 
 
-def test_tour_json_serves_file(tour_client):
-    """GET /api/plugins/{id}/tour.json returns file content as JSON for a plugin with a tour."""
-    client, _ = tour_client
-    r = client.get("/api/plugins/with_tour/tour.json")
-    assert r.status_code == 200
-    assert r.headers["content-type"].startswith("application/json")
-    data = r.json()
-    assert "tour" in data
-    assert data["tour"][0]["id"] == "step1"
 
 
 def test_tour_json_returns_404_for_missing_plugin(tour_client):
@@ -3435,144 +3426,14 @@ def test_list_plugins_enabled_default_true(tmp_path, reset_plugin_state):
         client.close()
 
 
-def test_set_plugin_enabled_persists_and_suppresses_caps(tmp_path, reset_plugin_state, monkeypatch):
-    """Disabling persists to plugin_state.json, returns {id, enabled:false}, and
-    a subsequent GET shows enabled:false AND empty capability metadata so the
-    plugin no longer occupies the capability pipeline graph."""
-    plugins = reset_plugin_state
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    monkeypatch.setenv("CONFIG_DIR", str(config_dir))
-
-    plugin_dir = tmp_path / "dummy"
-    plugin_dir.mkdir()
-    plugins.LOADED_PLUGINS.append({
-        "id": "demo", "name": "Demo", "nav": None, "type": None,
-        "has_screen": False, "has_script": False, "has_settings": False,
-        "has_tour": False, "_dir": plugin_dir, "_manifest": {},
-        "capabilities": {"example.domain": {"role": "owner"}},
-        "standards": ["capability-pipelines.v1"],
-    })
-
-    client = _make_api_client(plugins)
-    try:
-        r = client.post("/api/plugins/demo/enabled", json={"enabled": False})
-        assert r.status_code == 200
-        assert r.json() == {"id": "demo", "enabled": False}
-
-        # Persisted (only the non-default entry is stored).
-        state = json.loads((config_dir / "plugin_state.json").read_text())
-        assert state == {"demo": {"enabled": False}}
-
-        # Reflected immediately, with capabilities suppressed.
-        r = client.get("/api/plugins")
-        ids = {p["id"]: p for p in r.json()}
-        assert ids["demo"]["enabled"] is False
-        assert ids["demo"]["capabilities"] == {}
-        assert ids["demo"]["standards"] == []
-    finally:
-        client.close()
 
 
-def test_set_plugin_enabled_re_enable_clears_state(tmp_path, reset_plugin_state, monkeypatch):
-    """Re-enabling drops the key from plugin_state.json (only non-defaults are
-    stored) and restores the plugin's capability metadata in /api/plugins."""
-    plugins = reset_plugin_state
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    monkeypatch.setenv("CONFIG_DIR", str(config_dir))
-    (config_dir / "plugin_state.json").write_text(json.dumps({"demo": {"enabled": False}}))
-
-    plugin_dir = tmp_path / "dummy"
-    plugin_dir.mkdir()
-    plugins.LOADED_PLUGINS.append({
-        "id": "demo", "name": "Demo", "nav": None, "type": None,
-        "has_screen": False, "has_script": False, "has_settings": False,
-        "has_tour": False, "_dir": plugin_dir, "_manifest": {}, "enabled": False,
-        "capabilities": {"example.domain": {"role": "owner"}},
-        "standards": ["capability-pipelines.v1"],
-    })
-
-    client = _make_api_client(plugins)
-    try:
-        r = client.post("/api/plugins/demo/enabled", json={"enabled": True})
-        assert r.status_code == 200
-        assert r.json() == {"id": "demo", "enabled": True}
-
-        assert json.loads((config_dir / "plugin_state.json").read_text()) == {}
-
-        r = client.get("/api/plugins")
-        ids = {p["id"]: p for p in r.json()}
-        assert ids["demo"]["enabled"] is True
-        assert ids["demo"]["capabilities"] == {"example.domain": {"role": "owner"}}
-        assert ids["demo"]["standards"] == ["capability-pipelines.v1"]
-    finally:
-        client.close()
 
 
-def test_set_plugin_enabled_unknown_id_404(tmp_path, reset_plugin_state, monkeypatch):
-    """Toggling a plugin id that isn't loaded or pending → 404."""
-    plugins = reset_plugin_state
-    monkeypatch.setenv("CONFIG_DIR", str(tmp_path / "config"))
-    client = _make_api_client(plugins)
-    try:
-        r = client.post("/api/plugins/ghost/enabled", json={"enabled": False})
-        assert r.status_code == 404
-        assert "error" in r.json()
-    finally:
-        client.close()
 
 
-def test_set_plugin_enabled_bad_body_400(tmp_path, reset_plugin_state, monkeypatch):
-    """A missing or non-boolean `enabled` field → 400 (not FastAPI's 422)."""
-    plugins = reset_plugin_state
-    monkeypatch.setenv("CONFIG_DIR", str(tmp_path / "config"))
-    plugin_dir = tmp_path / "dummy"
-    plugin_dir.mkdir()
-    plugins.LOADED_PLUGINS.append({
-        "id": "demo", "name": "Demo", "nav": None, "type": None,
-        "has_screen": False, "has_script": False, "has_settings": False,
-        "has_tour": False, "_dir": plugin_dir, "_manifest": {},
-    })
-    client = _make_api_client(plugins)
-    try:
-        for bad in ({}, {"enabled": "yes"}, {"enabled": 1}, {"other": True}):
-            r = client.post("/api/plugins/demo/enabled", json=bad)
-            assert r.status_code == 400, bad
-            assert "error" in r.json()
-        # A non-JSON body is rejected too.
-        r = client.post("/api/plugins/demo/enabled", content=b"not json")
-        assert r.status_code == 400
-    finally:
-        client.close()
 
 
-def test_set_plugin_enabled_guardrails_block_always_on(tmp_path, reset_plugin_state, monkeypatch):
-    """A LOADED capability_inspector / app_tour_* may never be disabled → 400,
-    and nothing is written to plugin_state.json."""
-    plugins = reset_plugin_state
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    monkeypatch.setenv("CONFIG_DIR", str(config_dir))
-    plugin_dir = tmp_path / "dummy"
-    plugin_dir.mkdir()
-    # The guard rail runs AFTER the existence check, so the always-on plugins
-    # must actually be present for the 400 to fire (an absent id → 404 instead).
-    for pid in ("capability_inspector", "app_tour_library"):
-        plugins.LOADED_PLUGINS.append({
-            "id": pid, "name": pid, "nav": None, "type": None,
-            "has_screen": False, "has_script": False, "has_settings": False,
-            "has_tour": False, "_dir": plugin_dir, "_manifest": {},
-        })
-    client = _make_api_client(plugins)
-    try:
-        for pid in ("capability_inspector", "app_tour_library"):
-            r = client.post(f"/api/plugins/{pid}/enabled", json={"enabled": False})
-            assert r.status_code == 400, pid
-            assert "error" in r.json()
-        assert not (config_dir / "plugin_state.json").exists()
-    finally:
-        client.close()
 
 
 def test_set_plugin_enabled_unknown_always_on_id_is_404_not_400(tmp_path, reset_plugin_state, monkeypatch):
@@ -3589,33 +3450,6 @@ def test_set_plugin_enabled_unknown_always_on_id_is_404_not_400(tmp_path, reset_
         client.close()
 
 
-def test_set_plugin_enabled_persist_failure_returns_500(tmp_path, reset_plugin_state, monkeypatch):
-    """A filesystem write failure when persisting is a controlled 500, and the
-    in-memory flag is NOT flipped (memory and disk stay consistent)."""
-    plugins = reset_plugin_state
-    monkeypatch.setenv("CONFIG_DIR", str(tmp_path / "config"))
-    plugin_dir = tmp_path / "dummy"
-    plugin_dir.mkdir()
-    plugins.LOADED_PLUGINS.append({
-        "id": "demo", "name": "Demo", "nav": None, "type": None,
-        "has_screen": False, "has_script": False, "has_settings": False,
-        "has_tour": False, "_dir": plugin_dir, "_manifest": {},
-    })
-
-    def boom(plugin_id, enabled):
-        raise OSError("disk full")
-    monkeypatch.setattr(plugins, "_persist_plugin_enabled", boom)
-
-    client = _make_api_client(plugins)
-    try:
-        r = client.post("/api/plugins/demo/enabled", json={"enabled": False})
-        assert r.status_code == 500
-        assert "error" in r.json()
-        # In-memory flag untouched, so a later GET still shows enabled.
-        ids = {p["id"]: p for p in client.get("/api/plugins").json()}
-        assert ids["demo"]["enabled"] is True
-    finally:
-        client.close()
 
 
 def test_disabled_plugin_skipped_by_loader(tmp_path, reset_plugin_state, monkeypatch):
@@ -3677,41 +3511,6 @@ def test_corrupt_plugin_state_does_not_crash_loader(tmp_path, reset_plugin_state
     assert "ok" in {p["id"] for p in plugins.LOADED_PLUGINS}
 
 
-def test_reenable_startup_disabled_plugin_keeps_caps_suppressed(tmp_path, reset_plugin_state, monkeypatch):
-    """Re-enabling a plugin that was SKIPPED at startup (pending, status
-    "disabled") flips its `enabled` flag immediately but must NOT reintroduce
-    its capability metadata into /api/plugins — the plugin isn't mounted until
-    the next restart, so surfacing its capabilities would register a phantom
-    pipeline participant (Codex review)."""
-    plugins = reset_plugin_state
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    monkeypatch.setenv("CONFIG_DIR", str(config_dir))
-    (config_dir / "plugin_state.json").write_text(json.dumps({"off": {"enabled": False}}))
-
-    # A startup-skipped plugin lives in PENDING_PLUGINS with status "disabled".
-    plugins.PENDING_PLUGINS["off"] = {
-        "id": "off", "name": "Off", "nav": None, "type": None,
-        "status": "disabled", "enabled": False, "_order": 0,
-        "capabilities": {"example.domain": {"role": "owner"}},
-        "standards": ["capability-pipelines.v1"],
-    }
-
-    client = _make_api_client(plugins)
-    try:
-        r = client.post("/api/plugins/off/enabled", json={"enabled": True})
-        assert r.status_code == 200
-        assert r.json() == {"id": "off", "enabled": True}
-
-        ids = {p["id"]: p for p in client.get("/api/plugins").json()}
-        # Flag reflects intent immediately...
-        assert ids["off"]["enabled"] is True
-        # ...but it is still not mounted, so capabilities stay suppressed.
-        assert ids["off"]["status"] == "disabled"
-        assert ids["off"]["capabilities"] == {}
-        assert ids["off"]["standards"] == []
-    finally:
-        client.close()
 
 
 def test_is_plugin_enabled_ignores_malformed_entry(reset_plugin_state):

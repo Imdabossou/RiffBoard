@@ -1,12 +1,5 @@
-"""Library + smart-collection routes: the provider list/art/sync endpoints, the
-library query surface (songs, albums, artists, stats, genres, tuning-names,
-practice-suggestions), and collection CRUD.
-
-Extracted verbatim from server.py (R3) except @app->@router and the seam reads:
-meta_db->appstate.meta_db, and the registry singletons ->
-appstate.library_providers / appstate.local_library_provider (constructed +
-owned by server.py; plugins register providers through plugin_context). The
-provider classes + shared query/collection helpers live in lib/library_registry.py.
+"""Library routes: provider list/art and the paged library query endpoints
+(/api/library, albums, artists, stats, genres, tuning-names). Read-only.
 """
 
 import inspect
@@ -14,17 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 import appstate
 from library_registry import (
-    _library_filter_args, _normalize_instrument, _sanitize_collection_rules,
-    _safe_art_redirect_url, _split_csv, _sync_collection_provider,
-    _unregister_collection_provider,
+    _library_filter_args, _normalize_instrument, _safe_art_redirect_url, _split_csv,
 )
 from metadata_db import _effective_keyset_sort, next_library_cursor
-from reqfields import _clean_str
 
 import logging
 log = logging.getLogger("feedBack.server")
@@ -212,19 +202,6 @@ async def get_library_provider_song_art(provider_id: str, song_id: str):
     _require_library_provider_capability(library_provider, "art.read")
     result = await _call_library_provider_async(library_provider, "get_art", song_id=song_id)
     return _library_art_response(result)
-
-
-@router.post("/api/library/providers/{provider_id}/songs/{song_id:path}/sync")
-async def sync_library_provider_song(provider_id: str, song_id: str):
-    """Ask a provider to sync a remote song into the local library/cache."""
-    library_provider = _get_library_provider(provider_id)
-    _require_library_provider_capability(library_provider, "song.sync")
-    result = await _call_library_provider_async(library_provider, "sync_song", song_id=song_id)
-    if result is None:
-        return {"ok": True}
-    if isinstance(result, dict):
-        return result
-    return {"ok": True, "result": result}
 
 
 @router.get("/api/library")
@@ -444,71 +421,3 @@ async def list_tuning_names(provider: str = "local", instrument: str = ""):
     _require_library_provider_capability(library_provider, "library.read")
     return await _call_library_provider_async(
         library_provider, "tuning_names", instrument=_normalize_instrument(instrument))
-
-
-@router.get("/api/library/practice-suggestions")
-def api_practice_suggestions(limit: int = 8):
-    """Growth-edge 'practice next' shelf (P3): attempted-but-not-mastered songs
-    ranked by difficulty-appropriateness × mastery-proximity, joined to song
-    metadata. Replaces the recency-only 'Keep practicing' shelf ordering. Local
-    library only — reads local practice stats."""
-    from urllib.parse import quote
-    out = []
-    for r in appstate.meta_db.growth_edge_suggestions(limit):
-        meta = appstate.meta_db.conn.execute(
-            "SELECT title, artist, tuning_name FROM songs WHERE filename = ?",
-            (r["filename"],),
-        ).fetchone()
-        title, artist, tuning_name = meta if meta else (None, None, None)
-        out.append({
-            **r,
-            "title": title or r["filename"],
-            "artist": artist or "",
-            "tuning_name": tuning_name or "",
-            "art_url": f"/api/song/{quote(r['filename'])}/art",
-        })
-    return out
-
-
-@router.get("/api/collections")
-def api_list_collections():
-    """Smart/dynamic collections (saved live library filters)."""
-    return {"collections": appstate.meta_db.list_collections()}
-
-
-@router.post("/api/collections")
-def api_create_collection(data: dict):
-    """Create a collection from a name + a set of library filter rules. It
-    immediately appears as a source in the library provider picker."""
-    if not isinstance(data, dict):
-        return JSONResponse({"error": "body must be an object"}, status_code=400)
-    name = _clean_str(data.get("name"))
-    if not name:
-        return JSONResponse({"error": "name required"}, status_code=400)
-    col = appstate.meta_db.create_collection(name, _sanitize_collection_rules(data.get("rules")))
-    _sync_collection_provider(col)
-    return {"ok": True, "collection": col}
-
-
-@router.put("/api/collections/{pid}")
-def api_update_collection(pid: int, data: dict):
-    """Rename a collection and/or replace its rules."""
-    if not isinstance(data, dict):
-        return JSONResponse({"error": "body must be an object"}, status_code=400)
-    name = _clean_str(data.get("name")) or None
-    rules = _sanitize_collection_rules(data["rules"]) if "rules" in data else None
-    col = appstate.meta_db.update_collection(pid, name=name, rules=rules)
-    if col is None:
-        return JSONResponse({"error": "collection not found"}, status_code=404)
-    _sync_collection_provider(col)
-    return {"ok": True, "collection": col}
-
-
-@router.delete("/api/collections/{pid}")
-def api_delete_collection(pid: int):
-    """Delete a collection and unregister its provider."""
-    if not appstate.meta_db.is_collection(pid):
-        return JSONResponse({"error": "collection not found"}, status_code=404)
-    appstate.meta_db.delete_playlist(pid)
-    _unregister_collection_provider(pid)
-    return {"ok": True}

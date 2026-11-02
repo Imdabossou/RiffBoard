@@ -78,88 +78,21 @@ def test_charts_include_best_accuracy(client, server):
 
 # ── PUT / DELETE preferred ───────────────────────────────────────────────────
 
-def test_set_preferred(client, server):
-    _put(server, "a.archive", "Song", "Artist", arrangements=2)
-    _put(server, "b.archive", "Song", "Artist", arrangements=1)
-    wk = _wk(server, "a.archive")
-    body = client.put(f"/api/work/{wk}/preferred", json={"filename": "b.archive"}).json()
-    assert body["preferred_filename"] == "b.archive" and body["preferred_source"] == "user"
-    assert _rep(body)["filename"] == "b.archive" and _rep(body)["is_preferred"]
-    # the grouped grid now shows b as the work's card
-    assert client.get("/api/library", params={"group": 1}).json()["songs"][0]["filename"] == "b.archive"
 
 
-def test_set_preferred_nonmember_is_400(client, server):
-    _put(server, "a.archive", "Song", "Artist")
-    _put(server, "x.archive", "Other", "Artist")
-    wk = _wk(server, "a.archive")
-    assert client.put(f"/api/work/{wk}/preferred", json={"filename": "x.archive"}).status_code == 400
-    assert client.put(f"/api/work/{wk}/preferred", json={}).status_code == 400
 
 
-def test_reset_preferred_returns_to_auto(client, server):
-    _put(server, "a.archive", "Song", "Artist", arrangements=2)
-    _put(server, "b.archive", "Song", "Artist", arrangements=1)
-    wk = _wk(server, "a.archive")
-    client.put(f"/api/work/{wk}/preferred", json={"filename": "b.archive"})
-    body = client.delete(f"/api/work/{wk}/preferred").json()
-    assert body["preferred_source"] == "auto"
-    assert _rep(body)["filename"] == "a.archive"          # auto-pick again
 
 
 # ── split / unsplit ──────────────────────────────────────────────────────────
 
-def test_split_and_unsplit_endpoints(client, server):
-    _put(server, "a.archive", "Song", "Artist")
-    _put(server, "b.archive", "Song", "Artist")
-    wk = _wk(server, "a.archive")
-    assert client.get(f"/api/work/{wk}/charts").json()["count"] == 2
-    assert client.post("/api/chart/b.archive/split").json()["ok"] is True
-    assert {c["filename"] for c in client.get(f"/api/work/{wk}/charts").json()["charts"]} == {"a.archive"}
-    assert client.get("/api/library", params={"group": 1}).json()["total"] == 2   # two works now
-    assert client.post("/api/chart/b.archive/unsplit").json()["ok"] is True
-    assert client.get(f"/api/work/{wk}/charts").json()["count"] == 2              # rejoined
 
 
 # ── GET chart work membership (P5d — tree/ungrouped opener resolve) ──────────
 
-def test_chart_work_grouped_pair(client, server):
-    _put(server, "a.archive", "Song", "Artist")
-    _put(server, "b.archive", "Song", "Artist")
-    wk = _wk(server, "a.archive")
-    for fn in ("a.archive", "b.archive"):
-        body = client.get(f"/api/chart/{fn}/work").json()
-        assert body == {"filename": fn, "work_key": wk, "chart_count": 2,
-                        "is_split": False}
 
 
-def test_chart_work_singleton(client, server):
-    _put(server, "a.archive", "Song", "Artist")
-    body = client.get("/api/chart/a.archive/work").json()
-    assert body["work_key"] == _wk(server, "a.archive")
-    assert body["chart_count"] == 1
 
 
-def test_chart_work_split_resolves_to_singleton_key(client, server):
-    _put(server, "a.archive", "Song", "Artist")
-    _put(server, "b.archive", "Song", "Artist")
-    wk = _wk(server, "a.archive")
-    client.post("/api/chart/b.archive/split")
-    body = client.get("/api/chart/b.archive/work").json()
-    # the split chart stands alone under its EFFECTIVE (split) key…
-    assert body["work_key"] != wk and body["chart_count"] == 1
-    # …and its key round-trips into the charts endpoint as its own work.
-    # Split keys contain '#' — clients MUST URL-encode the work_key in the
-    # path (the v3 client encodeURIComponent's it) or the '#' truncates the
-    # URL as a fragment.
-    from urllib.parse import quote
-    charts = client.get(f"/api/work/{quote(body['work_key'], safe='')}/charts").json()
-    assert [c["filename"] for c in charts["charts"]] == ["b.archive"]
-    # the chart left behind is a singleton too
-    assert client.get("/api/chart/a.archive/work").json()["chart_count"] == 1
 
 
-def test_chart_work_unknown_file(client, server):
-    _put(server, "a.archive", "Song", "Artist")
-    body = client.get("/api/chart/nope.archive/work").json()
-    assert body["work_key"] is None and body["chart_count"] == 0

@@ -143,7 +143,13 @@ def test_server_app_request_id_propagated_to_logs(monkeypatch, tmp_path):
     monkeypatch.setattr(server_mod, "load_plugins", lambda *a, **kw: None)
     monkeypatch.setattr(server_mod, "startup_scan", lambda: None)
 
-    # Add a probe route to server.app so the test can trigger a log write.
+    # Add a probe route to server.app so the test can trigger a log write. The
+    # public allowlist would 404 an unknown path, so let this one through.
+    import public_guard
+    _orig_allowed = public_guard.is_allowed
+    monkeypatch.setattr(public_guard, "is_allowed",
+                        lambda m, p: p == "/_test_log_probe" or _orig_allowed(m, p))
+
     @server_mod.app.get("/_test_log_probe")
     def _probe():
         logging.getLogger("feedBack.server").info("server_probe_event")

@@ -40,8 +40,8 @@ import threading
 from pathlib import Path
 
 import appstate
-import builtin_content
-import enrichment
+
+_LOOSE_FOLDERS = False
 import loosefolder as loosefolder_mod
 import sloppak as sloppak_mod
 from appconfig import _load_config
@@ -235,8 +235,9 @@ def background_scan(force: bool = False):
         log.warning("Scan: no DLC folder configured")
         return
 
-    builtin_content.seed_builtin_diagnostic_sloppaks(appstate.server_root, dlc)
-    builtin_content.seed_builtin_starter_content(appstate.server_root, dlc)
+    # RiffBoard never writes into the library folder: upstream seeded its own
+    # starter/diagnostic packs here, which put songs on a public site that the
+    # operator never chose. The library is exactly what is in the folder.
 
     # Fast path: if every library directory recorded by the last scan still has
     # the same mtime, nothing was added, removed, or renamed, so the whole
@@ -284,7 +285,9 @@ def background_scan(force: bool = False):
         loose_songs = []
         seen_loose = set()
         sloppak_dirs = {p for p in sloppaks if p.is_dir()}
-        for wem in sorted(dlc.rglob("*.wem")):
+        # RiffBoard serves feedpaks only: loose XML+WEM folders need a native
+        # audio converter the image doesn't ship, so they aren't listed.
+        for wem in (sorted(dlc.rglob("*.wem")) if _LOOSE_FOLDERS else []):
             if "preview" in wem.stem.lower():
                 continue
             if _is_excluded_from_library(wem):
@@ -467,12 +470,6 @@ def _scan_runner():
                 break
             _scan_rescan_pending = False
             _scan_status["running"] = True
-    # Enrichment rides scan completion (library-metadata design §6): the scan
-    # pool is a side-effect-free, no-network process pool by design, so
-    # enrichment is a SEPARATE post-scan pass — non-blocking, the library is
-    # usable immediately. The 5-minute periodic rescan re-kicks it, which is
-    # the natural low-priority retry hook.
-    enrichment._kick_enrich()
 
 
 def status() -> dict:

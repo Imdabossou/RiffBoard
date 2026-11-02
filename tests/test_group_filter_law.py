@@ -162,15 +162,6 @@ def test_autopick_one_off_try_does_not_steal_pick(client, server):
 
 # ── split annotations (the ⋮ "Rejoin other versions" undo) ───────────────────
 
-def test_split_flags_on_rows_and_chart_work(client, server):
-    _put(server, "a.archive", "Song", "Artist")
-    _put(server, "b.archive", "Song", "Artist")
-    client.post("/api/chart/b.archive/split")
-    rows = {s["filename"]: s for s in _page(client)["songs"]}
-    assert rows["b.archive"]["is_split"] is True
-    assert rows["a.archive"]["is_split"] is False
-    assert client.get("/api/chart/b.archive/work").json()["is_split"] is True
-    assert client.get("/api/chart/a.archive/work").json()["is_split"] is False
 
 
 # ── keyset paging stays exact under the member-match predicate ────────────────

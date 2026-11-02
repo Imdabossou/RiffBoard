@@ -63,7 +63,7 @@ def test_filename_dotdot_traversal_is_403(dlc_client):
     # `filename` escapes DLC_DIR — must 403 before any filesystem read,
     # never serve /etc/passwd (the original report).
     r = tc.get("/api/sloppak/..%2F..%2F..%2F..%2Fetc/file/passwd")
-    assert r.status_code == 403, r.text
+    assert r.status_code in (403, 404), r.text  # RiffBoard: public_guard 404s ".." before routing
 
 
 def test_rel_path_dotdot_traversal_is_403(dlc_client):
@@ -73,7 +73,7 @@ def test_rel_path_dotdot_traversal_is_403(dlc_client):
     # Drop a secret as a sibling of the sloppak inside DLC_DIR.
     (dlc / "secret.txt").write_text("top secret")
     r = tc.get("/api/sloppak/song.sloppak/file/..%2Fsecret.txt")
-    assert r.status_code == 403, r.text
+    assert r.status_code in (403, 404), r.text  # RiffBoard: public_guard 404s ".." before routing
 
 
 def test_contained_non_sloppak_is_404(dlc_client):

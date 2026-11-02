@@ -1,31 +1,12 @@
-fastapi>=0.110.0
-uvicorn[standard]>=0.29.0
-websockets>=12.0
-pyguitarpro>=0.10.1
-cloudscraper>=1.2.71
-curl_cffi>=0.7.0
-midiutil>=1.2.1
-mido>=1.3.0
-Pillow>=10.0.0
+# RiffBoard runtime dependencies. Kept deliberately short: every package here
+# is attack surface on a public server. The upstream scraper (cloudscraper,
+# curl_cffi, requests), yt-dlp, Guitar Pro/MIDI importers, Pillow and the
+# diagnostics probes (psutil, py-cpuinfo) went with the features that used them.
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
 PyYAML>=6.0
-python-multipart>=0.0.9
 structlog>=24.1.0
 asgi-correlation-id>=4.3.3
-psutil>=5.9.0
-py-cpuinfo>=9.0.0
-yt-dlp>=2025.1.1
-# Used by lib/sloppak_convert.py:_run_demucs_remote and
-# lib/lyrics_transcribe.py:transcribe_vocals_remote to talk to optional
-# remote Demucs / WhisperX servers. Currently transitively pulled by
-# cloudscraper, but declaring it explicitly avoids breakage if that
-# transitive dep ever changes upstream.
-requests>=2.31
-
-# Hard dependency of anyio (FastAPI/Starlette's async layer): anyio imports it
-# lazily, so `import anyio` succeeds without it but the server crashes with
-# `ModuleNotFoundError: sniffio` the moment it enters its async loop. Normally
-# transitive via fastapi -> starlette -> anyio, but the desktop bundle's Python
-# install doesn't reliably include it (observed missing in clean Windows AND
-# Linux bundles, causing "backend failed before startup"). Declare it
-# explicitly, same as requests above.
+# Hard dependency of anyio (FastAPI's async layer) that it imports lazily;
+# declared so a slim install can't crash at the first request.
 sniffio>=1.3.1
