@@ -189,6 +189,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/static/{*path}", get(static_file))
         .route("/api/version", get(version))
         .route(
+            "/api/site",
+            get(|State(s): S| async move {
+                no_cache(Json(crate::site::public_json(&s.cfg.config_dir)).into_response())
+            }),
+        )
+        .route("/site.css", get(site_css))
+        .route("/site/{name}", get(site_asset))
+        .route(
             "/api/scan-status",
             get(|State(s): S| async move { Json(s.index.status()) }),
         )
@@ -277,6 +285,27 @@ async fn static_file(State(s): S, req: Request) -> Response {
     match ServeDir::new(&s.cfg.static_dir).oneshot(req).await {
         Ok(r) => no_cache(r.map(Body::new)),
         Err(_) => err(StatusCode::NOT_FOUND, "not found"),
+    }
+}
+
+async fn site_css(State(s): S) -> Response {
+    no_cache(
+        (
+            [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+            crate::site::css(&s.cfg.config_dir),
+        )
+            .into_response(),
+    )
+}
+
+async fn site_asset(State(s): S, Path(name): Path<String>, req: Request) -> Response {
+    if !crate::site::is_asset_name(&name) {
+        return err(StatusCode::NOT_FOUND, "not found");
+    }
+    let dir = s.cfg.config_dir.join("site");
+    match pack::resolve_in(&dir, &name).filter(|p| p.is_file()) {
+        Some(p) => no_cache(serve_file(p, req).await),
+        None => err(StatusCode::NOT_FOUND, "not found"),
     }
 }
 

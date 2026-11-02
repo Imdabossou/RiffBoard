@@ -115,6 +115,8 @@
     <link rel="stylesheet" href="/static/tour-engine.css">
     <link rel="stylesheet" href="/static/v3/v3.css">
     <link rel="stylesheet" href="/static/riffboard/riffboard.css">
+    <!-- Per-site colours (CONFIG_DIR/site/site.json); empty when unbranded. -->
+    <link rel="stylesheet" href="/site.css">
     <!-- Detachable panes: the pop-out chip, the dock, and the widgets built-in
          panes render with. Hand-authored (not Tailwind-scanned) so a
          runtime-installed plugin can use the chip without shipping its own CSS. -->
@@ -141,6 +143,7 @@
     <!-- RiffBoard: per-visitor state (settings, favourites, loops...) lives in this
          browser, not on the shared server. Must run before anything fetches. -->
     <script defer src="/static/riffboard/local-api.js"></script>
+    <script defer src="/static/riffboard/site.js"></script>
     <script defer src="/static/diagnostics.js"></script>
     <script type="module" src="/static/capabilities.js"></script>
     <script type="module" src="/static/capabilities/library.js"></script>

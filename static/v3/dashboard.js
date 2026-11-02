@@ -63,6 +63,10 @@
         const pick = (cont && cont.filename) ? null : await randomSong();
         if (seq !== renderSeq) return;
         const songCount = (stats && (stats.total_songs ?? stats.total)) || 0;
+        const site = (window.riffboardSite && window.riffboardSite.data) || {};
+        const heroTitle = site.hero_title || 'Play along. Top the board.';
+        const heroText = site.hero_text || 'Original songs from independent artists, charted for guitar and bass. Plug in or use your mic, play the whole song, and post your score.';
+        const heroImage = site.hero_image || '/static/v3/brand/hero.png';
 
         let sideCard;
         if (cont && cont.filename) {
@@ -118,11 +122,11 @@
             '<div class="max-w-7xl mx-auto px-4 md:px-8 pb-12">' +
             '<div class="grid lg:grid-cols-3 gap-6">' +
             '<div class="rb-on-dark lg:col-span-2 relative rounded-xl overflow-hidden min-h-[360px] md:min-h-[440px] flex items-center bg-fb-bg">' +
-            '<img src="/static/v3/brand/hero.png" alt="" aria-hidden="true" class="absolute inset-y-0 right-0 h-full w-2/3 object-cover object-right" onerror="this.style.display=\'none\'">' +
+            '<img src="' + esc(heroImage) + '" alt="" aria-hidden="true" class="absolute inset-y-0 right-0 h-full w-2/3 object-cover object-right" onerror="this.style.display=\'none\'">' +
             '<div class="absolute inset-0 rb-hero-fade"></div>' +
             '<div class="relative p-6 md:p-8 max-w-md">' +
-            '<h3 class="text-3xl md:text-4xl font-bold leading-tight text-white">Play along. Top the board.</h3>' +
-            '<p class="text-gray-300 mt-3">Original songs from independent artists, charted for guitar and bass. Plug in or use your mic, play the whole song, and post your score.</p>' +
+            '<h3 class="text-3xl md:text-4xl font-bold leading-tight text-white">' + esc(heroTitle) + '</h3>' +
+            '<p class="text-gray-300 mt-3">' + esc(heroText) + '</p>' +
             '<div class="flex flex-wrap gap-3 mt-6">' +
             '<button id="rb-start" class="bg-fb-primary hover:bg-fb-primaryHi text-white px-6 py-2.5 rounded-md font-medium shadow-lg shadow-fb-primary/20">Start playing</button>' +
             '<button id="rb-boards" class="border border-gray-400 hover:border-white text-white px-6 py-2.5 rounded-md font-medium">Leaderboards</button>' +

@@ -1,0 +1,25 @@
+{
+  "name": "The Example Band",
+  "tagline": "Play along with The Example Band",
+  "logo": "logo.png",
+  "hero_image": "hero.jpg",
+  "favicon": "favicon.png",
+  "hero_title": "Play our songs. Top the board.",
+  "hero_text": "Every song charted by hand for bass and guitar. Plug in or use your mic, play the whole song, and get your name on the leaderboard.",
+  "about_title": "About the band",
+  "about": ["A paragraph or two about the band, as plain text."],
+  "links": [
+    {"label": "Bandcamp", "url": "https://example.bandcamp.com"},
+    {"label": "Instagram", "url": "https://instagram.com/example"}
+  ],
+  "dark": {
+    "bg": "#1b1720", "sidebar": "#151219", "card": "#272030", "cardMuted": "#120f16",
+    "primary": "#db3f8f", "primaryHi": "#f06aa8", "text": "#fbf5fa", "textDim": "#b8a8b8",
+    "border": "#3d3146", "gold": "#f4c95d"
+  },
+  "light": {
+    "bg": "#f6f1e7", "sidebar": "#fffaf2", "card": "#fffdf8", "cardMuted": "#ece3d3",
+    "primary": "#c2307a", "primaryHi": "#a3245f", "text": "#1f1a1d", "textDim": "#5b5058",
+    "border": "#e0d4c3", "gold": "#9a6b00"
+  }
+}

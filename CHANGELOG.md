@@ -20,6 +20,11 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
 - The admin CLI is now `riffboard admin <command>`; the container health check
   is `riffboard healthcheck`.
 
+### Added
+- Per-site branding from `CONFIG_DIR/site/site.json`: name, tagline, hero
+  copy and image, logo, favicon, About card with links, and dark/light
+  colours (`/api/site`, `/site.css`, `/site/<image>`).
+
 ### Removed
 - The Python server and its dependencies, the drum and keys highway plugins
   (guitar and bass charts only), drum tabs and notation streaming.

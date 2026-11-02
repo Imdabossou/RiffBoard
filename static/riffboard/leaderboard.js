@@ -259,11 +259,20 @@
         const root = document.getElementById('v3-about');
         if (!root || root.dataset.rendered) return;
         const ver = await jget('/api/version');
+        if (window.riffboardSite && !window.riffboardSite.loaded) await new Promise((r) => setTimeout(r, 300));
         const src = (ver && ver.source_url) || 'https://github.com/Imdabossou/RiffBoard';
         root.dataset.rendered = '1';
         const card = (h, body) => '<div class="bg-fb-card/80 rounded-xl p-6 border border-fb-border/50"><h2 class="text-lg font-bold mb-2">' + h + '</h2><div class="text-sm text-fb-textDim space-y-2">' + body + '</div></div>';
-        root.innerHTML = '<div class="max-w-3xl mx-auto px-4 md:px-8 pb-12 space-y-4 fb-selectable">' +
-            card('What is RiffBoard?', '<p>A place to play along to original songs by independent artists. Every song is charted by hand for guitar and bass. Plug in (or play near your microphone) and the notes you hit are scored as you play.</p>') +
+        const site = (window.riffboardSite && window.riffboardSite.data) || {};
+        const siteCard = (site.about || site.links)
+            ? card(esc(site.about_title || ('About ' + (site.name || 'the band'))),
+                (site.about || []).map((p) => '<p>' + esc(p) + '</p>').join('') +
+                (site.links ? '<p class="flex flex-wrap gap-x-4 gap-y-1">' + site.links.map((l) =>
+                    '<a class="text-fb-primary hover:text-fb-primaryHi underline" href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer">' + esc(l.label) + '</a>').join('') + '</p>' : ''))
+            : '';
+        const siteName = site.name ? esc(site.name) + ' runs on RiffBoard: a' : 'A';
+        root.innerHTML = '<div class="max-w-3xl mx-auto px-4 md:px-8 pb-12 space-y-4 fb-selectable">' + siteCard +
+            card(site.name ? 'How it works' : 'What is RiffBoard?', '<p>' + siteName + ' place to play along to original songs by independent artists. Every song is charted by hand for guitar and bass. Plug in (or play near your microphone) and the notes you hit are scored as you play.</p>') +
             card('How scoring works', '<p>Note detection runs entirely in your browser: your audio never leaves your device. When a song ends, only the totals (notes hit, notes missed, best streak) are sent if you choose to post a score.</p>' +
                 '<p>A run counts for the leaderboard when you play the whole song at normal speed and full difficulty, without skipping, rewinding or looping. Practise however you like; those runs just stay off the board.</p>') +
             card('Privacy', '<p>There are no accounts. Your settings, favourites and practice history are stored in this browser only. Posting a score stores the name you type, your score and the time. To limit abuse, the server also keeps a salted, one-way hash of your IP address with each score; it is never shown or shared.</p>') +

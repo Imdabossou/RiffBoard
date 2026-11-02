@@ -143,7 +143,7 @@ body { background-color: rgb(var(--fb-sidebar)); color: rgb(var(--fb-text)); }
 
 /* Home hero: artwork fades into the (always dark) banner background. */
 .rb-hero-fade {
-    background-image: linear-gradient(135deg, #0f172a 0%, #0f172a 40%, rgba(15, 23, 42, .55) 65%, rgba(15, 23, 42, .15) 100%);
+    background-image: linear-gradient(135deg, rgb(var(--fb-bg)) 0%, rgb(var(--fb-bg)) 40%, rgb(var(--fb-bg) / .55) 65%, rgb(var(--fb-bg) / .15) 100%);
 }
 .hover\:text-white:hover:not(#player *):not(.rb-on-dark *):not([class*="bg-fb-primary"]):not([class*="bg-accent"]) {
     color: rgb(var(--rb-white));

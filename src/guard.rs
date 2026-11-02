@@ -65,8 +65,13 @@ pub fn is_allowed(method: &Method, path: &str) -> bool {
         | "/api/library/tuning-names"
         | "/api/library/providers"
         | "/api/plugins"
-        | "/api/leaderboards" => return true,
+        | "/api/leaderboards"
+        | "/api/site"
+        | "/site.css" => return true,
         _ => {}
+    }
+    if let Some(rest) = path.strip_prefix("/site/") {
+        return crate::site::is_asset_name(rest);
     }
     if let Some(rest) = path.strip_prefix("/static/") {
         return !rest.is_empty();
@@ -229,6 +234,9 @@ mod tests {
             (&g, "/api/plugins/highway_3d/assets/plugin.css"),
             (&g, "/api/work/a%7Cb/charts"),
             (&g, "/api/library/providers/remote:x/songs/a/art"),
+            (&g, "/api/site"),
+            (&g, "/site.css"),
+            (&g, "/site/logo.png"),
         ] {
             assert!(is_allowed(m, path), "{m} {path}");
         }
@@ -249,6 +257,10 @@ mod tests {
             (&g, "/api/plugins/highway_3d/utils/a.js"),
             (&g, "/api/sloppak/a.zip/file/x"),
             (&g, "/api/song/%2E%2E%2Fetc%2Fpasswd"),
+            (&g, "/site/site.json"),
+            (&g, "/site/logo.svg"),
+            (&g, "/site/../config.json"),
+            (&p, "/site.css"),
             (&g, "/static/%2e%2e/server.py"),
         ] {
             assert!(!is_allowed(m, path), "{m} {path}");

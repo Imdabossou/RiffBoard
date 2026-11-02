@@ -365,3 +365,50 @@ async fn websocket_stays_open_after_ready() {
         "socket should idle, not close"
     );
 }
+
+#[tokio::test]
+async fn site_branding_is_validated() {
+    let srv = start("site").await;
+    let get = |p: &str| reqwest::get(format!("{}{p}", srv.base));
+    assert_eq!(
+        get("/api/site")
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap(),
+        json!({})
+    );
+    let css = get("/site.css").await.unwrap();
+    assert!(
+        css.headers()["content-type"]
+            .to_str()
+            .unwrap()
+            .starts_with("text/css")
+    );
+
+    let dir = srv.config.0.join("site");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("logo.png"), b"\x89PNG\r\n\x1a\n").unwrap();
+    std::fs::write(dir.join("evil.svg"), b"<svg onload=alert(1)>").unwrap();
+    std::fs::write(dir.join("site.json"), json!({
+        "name": "Test Band", "tagline": "<b>hi</b>", "logo": "logo.png", "favicon": "evil.svg",
+        "links": [{"label": "Site", "url": "https://example.com"}, {"label": "Bad", "url": "javascript:alert(1)"}],
+        "dark": {"primary": "#ff0080", "bg": "red; } body { display:none"},
+    }).to_string()).unwrap();
+    let site: Value = get("/api/site").await.unwrap().json().await.unwrap();
+    assert_eq!(site["name"], "Test Band");
+    assert_eq!(site["tagline"], "<b>hi</b>"); // plain text; the page escapes it
+    assert_eq!(site["logo"], "/site/logo.png");
+    assert!(site.get("favicon").is_none(), "svg is never served");
+    assert_eq!(
+        site["links"],
+        json!([{"label": "Site", "url": "https://example.com"}])
+    );
+    let css = get("/site.css").await.unwrap().text().await.unwrap();
+    assert!(css.contains("--fb-primary: 255 0 128;"));
+    assert!(!css.contains("display:none"));
+    assert_eq!(get("/site/logo.png").await.unwrap().status().as_u16(), 200);
+    assert_eq!(get("/site/evil.svg").await.unwrap().status().as_u16(), 404);
+    assert_eq!(get("/site/site.json").await.unwrap().status().as_u16(), 404);
+}

@@ -74,7 +74,8 @@
     // The topbar IS each page's header row, so its title mirrors the screen.
     function titleFor(screenId) {
         if (screenId === 'v3-home') {
-            return 'Welcome to RiffBoard';
+            const site = (window.riffboardSite && window.riffboardSite.data) || {};
+            return 'Welcome to ' + (site.name || 'RiffBoard');
         }
         const entry = byScreen(screenId);
         if (entry) return entry.label;

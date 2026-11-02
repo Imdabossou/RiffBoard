@@ -11,6 +11,7 @@ mod guard;
 mod library;
 mod pack;
 mod settings;
+mod site;
 mod store;
 mod tunings;
 mod util;
