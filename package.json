@@ -1,13 +1,13 @@
 {
-  "name": "feedBack-browser-tests",
+  "name": "riffboard-browser-tests",
   "version": "1.0.0",
-  "description": "Browser tests for FeedBack keyboard shortcuts and JS plugin-API contract tests under tests/js/.",
+  "description": "Frontend unit tests (node --test) and Playwright browser tests for RiffBoard.",
   "license": "AGPL-3.0-only",
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
-    "test:js": "node --test tests/js/*.test.js 'tests/plugins/*/js/*.test.js'",
+    "test:js": "node --test tests/js/*.test.js 'tests/plugins/*/js/*.test.js' plugins/note_detect/test/*.test.js",
     "install:playwright": "playwright install chromium",
     "lint": "eslint ."
   },

@@ -12,7 +12,7 @@ import sys
 import threading
 from pathlib import Path
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from safepath import safe_join
 

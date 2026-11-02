@@ -186,7 +186,6 @@ async def highway_ws(websocket: WebSocket, filename: str, arrangement: int = -1,
     # don't fire for sloppak bundles.
     is_loose = (not is_slop) and loosefolder_mod.is_loose_song(song_path)
     tmp = None
-    owns_tmp = False
     loaded_slop = None  # LoadedSloppak when is_slop
     _keepalive_active = True
 
@@ -214,7 +213,6 @@ async def highway_ws(websocket: WebSocket, filename: str, arrangement: int = -1,
                 )
                 song = loaded_slop.song
                 tmp = str(loaded_slop.source_dir)
-                owns_tmp = False
             elif is_loose:
                 # Loose folders need no extraction — load_song reads the
                 # arrangement XMLs directly from the flat directory.
@@ -223,7 +221,6 @@ async def highway_ws(websocket: WebSocket, filename: str, arrangement: int = -1,
                 # it directly.
                 song = await loop.run_in_executor(None, lambda: load_song(str(song_path)))
                 tmp = str(song_path)
-                owns_tmp = False
             else:
                 # Only open formats (.sloppak bundles and loose folders) are
                 # servable. There is no fallback container extraction path.

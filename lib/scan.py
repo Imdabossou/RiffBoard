@@ -310,6 +310,16 @@ def background_scan(force: bool = False):
         _scan_status = {**_SCAN_STATUS_INIT, "running": True, "stage": "error", "error": f"Unable to list {dlc}: {e}"}
         return
 
+    # rglob silently skips folders it can't read, which looks like "the songs
+    # vanished". Say so, so a permissions mix-up on the library is obvious.
+    try:
+        unreadable = [d for d in dlc.rglob("*") if d.is_dir() and not os.access(d, os.R_OK | os.X_OK)]
+    except OSError:
+        unreadable = []
+    if unreadable:
+        log.warning("Scan: %d library folder(s) aren't readable by this process and were skipped "
+                    "(e.g. %s). Check the library's file permissions.", len(unreadable), unreadable[0])
+
     all_songs = sloppaks + loose_songs
     log.info("Scan: listed %d sloppaks and %d loose folders in %s",
              len(sloppaks), len(loose_songs), dlc)

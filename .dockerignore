@@ -1,79 +1,27 @@
+# Allowlist: only what the image needs is sent to the build.
 *
-
-!.dockerignore
 !Dockerfile
-!dockerfile
 !requirements.txt
 !server.py
 !main.py
 !VERSION
-!tailwind.config.js
-
 !lib/
 !lib/**
-
-# Mirror the static/* policy from .gitignore: ship the static tree, but not
-# the cached audio/art artifacts a developer's runtime would generate
-# (static/*.ogg, *.mp3, *.wav, art/, audio_*/). Those bloat the image and
-# make builds non-reproducible across machines.
 !static/
 !static/**
-static/*.ogg
-static/*.mp3
-static/*.wav
-static/art/
-static/audio_*/
-static/sloppak_cache/
-# note-detection tuning flow auto-writes WAVs and JSONL captures here.
-# Not in .gitignore yet — see docs/note-detect-tuning.md — but still a
-# generated-at-runtime directory that shouldn't bake into the image.
-static/note_detect_recordings/
-
-# All in-tree core plugins ship in the image. Each plugin directory must be
-# explicitly re-allowed after the blanket `plugins/*/` exclusion below.
 !plugins/
-plugins/*/
-!plugins/__init__.py
-!plugins/app_tour_library/
-!plugins/app_tour_library/**
-!plugins/app_tour_settings/
-!plugins/app_tour_settings/**
-!plugins/capability_inspector/
-!plugins/capability_inspector/**
-!plugins/highway_3d/
-!plugins/highway_3d/**
-!plugins/minigames/
-!plugins/minigames/**
-!plugins/tuner/
-!plugins/tuner/**
+!plugins/**
+!tools/
+!tools/riffboard_admin.py
 
-!data/
-!data/**
-
-
-# Ship only the built-in diagnostic sloppak artifacts (seeded into
-# DLC_DIR/diagnostics-builtin/ at scan time). The builder script + README
-# under docs/diagnostics/ are dev-only and stay out of the image.
-!docs/
-docs/*/
-!docs/diagnostics/
-docs/diagnostics/*
-!docs/diagnostics/*.sloppak
-
-# Exclude common developer artifacts even inside the whitelisted trees so a
-# venv / cache / build output never gets baked into the image.
 **/__pycache__/
 **/*.pyc
 **/.pytest_cache/
-**/.mypy_cache/
 **/.ruff_cache/
 **/node_modules/
 **/.venv/
-**/venv/
 **/.env
-# (the Dockerfile builder stage rebuilds from source). A contributor
-# into the build context.
-**/bin/
-**/obj/
 **/.env.*
 **/.DS_Store
+plugins/*/test/
+plugins/*/tests/

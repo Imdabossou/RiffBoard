@@ -1,37 +1,32 @@
+# Example deployment. Put your feedpaks in ./library (subfolders are fine);
+# new ones appear within five minutes, or straight away with
+#   docker compose exec riffboard python tools/riffboard_admin.py rescan
 services:
-  web:
+  riffboard:
     build: .
+    image: riffboard:local
+    restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
-      # Mount your song library folder (adjust path for your system)
-      - ${LIBRARY_PATH:-./library}:/dlc
-      # Persistent config and cache
-      - feedBack-config:/config
-      # Mount source for live reload during development
-      - ./static:/app/static
-      - ./server.py:/app/server.py
-      - ./VERSION:/app/VERSION
-      - ./ug_browser.py:/app/ug_browser.py
-      - ./lib:/app/lib
-      - ./plugins:/app/plugins
-      - ./.git:/app/.git:ro
+      - ${LIBRARY_PATH:-./library}:/dlc:ro
+      - riffboard-config:/config
     environment:
-      - PYTHONPATH=/app/lib:/app
-      - DLC_DIR=/dlc
-      - CONFIG_DIR=/config
-      # Write note_detect recordings to the host-visible bind mount (./static)
-      # rather than the /config Docker volume: recorded takes (and training
-      # bundles) then land in static/note_detect_recordings/ on the host, where
-      # the offline harness can read them directly.
-      - STATIC_DIR=/app/static
-      # Logging (optional)
-      # - LOG_LEVEL=DEBUG       # DEBUG | INFO | WARNING | ERROR  (default: INFO)
-      # - LOG_FORMAT=json       # json | text  (default: text — coloured console)
-      # - LOG_FILE=/config/feedBack.log  # also write to a persistent file
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
+      # Behind a reverse proxy, name the header that carries the visitor's IP
+      # so rate limits apply per visitor (e.g. CF-Connecting-IP for Cloudflare,
+      # X-Forwarded-For for most others). Leave unset for a direct deployment.
+      # - RIFFBOARD_CLIENT_IP_HEADER=CF-Connecting-IP
+      # Where the "Source code" links point (AGPL: point it at YOUR fork if you
+      # change the code).
+      # - APP_SOURCE_URL=https://github.com/Imdabossou/RiffBoard
+      - LOG_LEVEL=INFO
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 volumes:
-  feedBack-config:
+  riffboard-config:
