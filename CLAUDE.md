@@ -7,29 +7,31 @@ Upstream's long developer guide (plugin contracts, renderer API, WebSocket proto
 ## Map
 
 ```
-server.py                    FastAPI wiring only (middleware, routers, startup scan)
-main.py                      uvicorn entry point
-lib/public_guard.py          THE allowlist middleware + security headers + client_ip()
-lib/admin_token.py           loopback admin token (written to CONFIG_DIR/admin.token)
-lib/leaderboard.py           scores SQLite store (CONFIG_DIR/leaderboard.db)
-lib/routers/scores.py        POST /api/runs, POST /api/scores, boards, /api/admin/*
-lib/routers/public_settings.py  stateless GET /api/settings?state=&patch=
-lib/routers/*.py             read-only library/song/art/media/tunings/version/ws_highway
-lib/sloppak.py, song.py ...  pack reading (upstream)
-static/riffboard/            RiffBoard frontend: local-api.js, leaderboard.js, riffboard.css
-static/v3/                   upstream v3 shell, trimmed (shell.js, songs.js, dashboard.js...)
-static/js/, static/app.js    upstream player engine
-plugins/                     bundled: highway_3d, drum/keys_highway_3d, tuner, input_setup, note_detect
-tools/riffboard_admin.py     operator CLI (rescan, moderate scores)
-tests/                       pytest (server) + tests/js (node --test)
+src/main.rs        startup, background rescans, `riffboard admin` / `healthcheck` subcommands
+src/guard.rs       THE allowlist middleware + security headers + client_ip() + admin check
+src/web.rs         every route, the highway WebSocket, runs/scores checks
+src/library.rs     in-memory library index (manifest-only scan) + library queries
+src/chart.rs       feedpak -> chart model -> highway WebSocket messages (wire format)
+src/pack.rs        path containment, manifests, cover art, zip unpack cache
+src/tunings.rs     tuning names/presets/perspectives + instrument profiles
+src/settings.rs    stateless GET /api/settings?state=&patch=
+src/store.rs       leaderboard SQLite (CONFIG_DIR/leaderboard.db)
+src/admin.rs       operator CLI (talks to loopback-only /api/admin/*)
+static/riffboard/  RiffBoard frontend: local-api.js, leaderboard.js, riffboard.css
+static/v3/, static/js/, static/app.js   upstream frontend, trimmed
+plugins/           bundled: highway_3d, tuner, input_setup, note_detect (+ registry.json = /api/plugins)
+tests/server.rs    end-to-end tests against the real binary; replays tests/golden/golden.json
+tests/fixtures/    fixture feedpak library (make_fixtures.py rebuilds it)
+tests/js/          frontend unit tests (node --test)
 ```
 
 ## Rules that matter
 
-1. **The allowlist is the security boundary.** A route is reachable only if `lib/public_guard.py` lists its method + path. Adding a route means adding the narrowest possible entry there and a test in `tests/test_riffboard_public.py` (both an allow case and the deny cases around it). Never add a wildcard covering `/api/*`.
+1. **The allowlist is the security boundary.** A route is reachable only if `src/guard.rs::is_allowed` lists its method + path. Adding a route means adding the narrowest possible rule there plus tests (the `allowlist` unit test and `tests/server.rs`), covering both the allow case and the deny cases around it. Never add a rule covering `/api/*`.
 2. **Visitors write exactly two things:** run tickets and scores. Anything per-user (settings, favourites, loops, stats, tuner config) lives in the browser via `static/riffboard/local-api.js`, which answers those upstream endpoints from localStorage. Don't add server-side per-user state.
 3. **The library is read-only.** Nothing writes into `DLC_DIR`. No seeding, no metadata write-back, no uploads.
 4. **Server settings come from the environment / `CONFIG_DIR/config.json`**, never from HTTP. `/api/settings` returns only `PLAYER_KEYS`.
+10. **Wire compatibility.** The frontend expects exactly what upstream's Python server sent. `tests/golden/golden.json` pins that; if a response must change, change the frontend with it and re-record deliberately.
 5. **Admin routes** (`/api/admin/*`) require loopback, no proxy forwarding headers, and the token. Keep it that way.
 6. **No third-party requests from the page** (fonts, analytics, CDNs). The only exception is the note detector's opt-in CREPE model loader.
 7. **Untrusted text is escaped** (`esc()` in every frontend module). Names are normalised server-side by `leaderboard.clean_name`.
@@ -43,12 +45,13 @@ tests/                       pytest (server) + tests/js (node --test)
 ## Testing
 
 ```bash
-.venv/bin/python -m pytest -q          # ~1150 tests, a few seconds
+cargo fmt --check && cargo clippy --all-targets -- -D warnings
+cargo test                                   # unit + end-to-end (spawns the binary)
 node --test tests/js/*.test.js
 node --test plugins/note_detect/test/*.test.js
 ```
 
-Run the app locally with `PYTHONPATH=lib:. DLC_DIR=<folder of .feedpak> CONFIG_DIR=<tmp> .venv/bin/python main.py`.
+Run locally: `DLC_DIR=<folder of .feedpak> CONFIG_DIR=<tmp> cargo run`. On the maintainer's mini PC keep builds light: `CARGO_BUILD_JOBS=2`.
 
 ## Repo conventions
 

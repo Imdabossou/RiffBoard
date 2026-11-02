@@ -10,7 +10,7 @@ RiffBoard is a website where anyone can pick a song, plug in a guitar or bass (o
 
 It's built for hosting your own small catalogue (songs by friends' bands, your own music) on the open internet. You chart the songs, drop the files in a folder, and people come and play them. There are no accounts and nothing for visitors to configure on the server.
 
-RiffBoard is a fork of [fee[dB]ack](https://github.com/got-feedback/feedBack), a self-hosted practice app for your own library. fee[dB]ack is designed for one trusted user on a home network. RiffBoard keeps its player and note detection and rebuilds everything around them for a public site.
+RiffBoard is a fork of [fee[dB]ack](https://github.com/got-feedback/feedBack), a self-hosted practice app for your own library. fee[dB]ack is designed for one trusted user on a home network. RiffBoard keeps its player and note detection, rewrites the server in Rust, and rebuilds everything around them for a public site.
 
 ## Features
 
@@ -29,11 +29,11 @@ RiffBoard is a fork of [fee[dB]ack](https://github.com/got-feedback/feedBack), a
 
 Upstream fee[dB]ack exposes about 120 unauthenticated endpoints that change server state: settings, uploads, deletes, plugin updates, metadata scraping. That's fine on a LAN and dangerous anywhere else. RiffBoard's server works the other way round:
 
-- **Allowlist, not blocklist.** Every request passes through [`lib/public_guard.py`](lib/public_guard.py). Only listed method and path pairs are served; anything else is a 404 before any route code runs. That includes WebSockets.
+- **Allowlist, not blocklist.** Every request passes through [`src/guard.rs`](src/guard.rs). Only listed method and path pairs are served; anything else is a 404 before any route code runs. That includes WebSockets.
 - **Read-only library.** The only writes a visitor can make are "start a run" and "post a score". The library folder is never written to. The image runs as a non-root user and works with a read-only root filesystem.
 - **Score checks.** Scores are computed by the server from hit/miss counts. A run needs a ticket issued when the song starts, and is only accepted from the same visitor after the chart's length has passed in real time. Hit counts must fit the chart. Both writes are rate-limited per visitor, names are normalised, and the operator can ban names.
 - **No third-party requests.** The font is self-hosted; there are no analytics, trackers or CDNs. One exception: the note detector's optional experimental "CREPE" mode downloads TensorFlow.js from jsDelivr if a visitor switches it on.
-- **Small image.** Six Python dependencies; no ffmpeg, vgmstream or Node in the image.
+- **Small, memory-safe server.** One static Rust binary on a distroless base: no shell, libc or OpenSSL in the image, a few MB of RAM at idle.
 
 Note detection runs in the browser, so a determined cheater could still forge a score. The checks above make that tedious rather than impossible. For a community board that's normally enough, and the admin tool can clean up anything that slips through.
 
@@ -69,14 +69,14 @@ If the library's files belong to a specific user, run the container as that user
 
 ### Admin tool
 
-Moderation and rescans use a small CLI inside the container. It talks to admin routes that only answer on loopback with a token from the config volume:
+Moderation and rescans use the same binary's `admin` subcommand inside the container. It talks to admin routes that only answer on loopback with a token from the config volume:
 
 ```bash
-docker compose exec riffboard python tools/riffboard_admin.py rescan
-docker compose exec riffboard python tools/riffboard_admin.py recent -n 20
-docker compose exec riffboard python tools/riffboard_admin.py delete 42
-docker compose exec riffboard python tools/riffboard_admin.py ban "Some Name"
-docker compose exec riffboard python tools/riffboard_admin.py wipe "Artist/Song.feedpak"
+docker compose exec riffboard /app/riffboard admin rescan
+docker compose exec riffboard /app/riffboard admin recent 20
+docker compose exec riffboard /app/riffboard admin delete 42
+docker compose exec riffboard /app/riffboard admin ban "Some Name"
+docker compose exec riffboard /app/riffboard admin wipe "Artist/Song.feedpak"
 ```
 
 ## Charting songs
@@ -85,17 +85,18 @@ RiffBoard plays charts; it doesn't make them. Use fee[dB]ack's editor or any too
 
 ## Development
 
-```bash
-python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-test.txt
-PYTHONPATH=lib:. DLC_DIR=./library CONFIG_DIR=./.config .venv/bin/python main.py
+You'll need Rust (stable, edition 2024) and Node 22 for the frontend tests.
 
-.venv/bin/python -m pytest                    # server tests
+```bash
+DLC_DIR=./library CONFIG_DIR=./.config cargo run      # serves http://localhost:8000
+
+cargo test                                    # unit tests + end-to-end replay of tests/golden
 node --test tests/js/*.test.js                # frontend unit tests
 node --test plugins/note_detect/test/*.test.js
 bash scripts/build-tailwind.sh                # after adding Tailwind classes
 ```
 
-The frontend is plain JavaScript with no build step apart from the prebuilt Tailwind stylesheet. RiffBoard-specific code lives in `static/riffboard/`, `lib/public_guard.py`, `lib/leaderboard.py` and `lib/routers/scores.py`. Most other files are upstream's, trimmed down. [CLAUDE.md](CLAUDE.md) has a fuller map.
+The server is plain Rust (axum + tokio, SQLite only for scores) in `src/`. The frontend is plain JavaScript with no build step apart from the prebuilt Tailwind stylesheet; RiffBoard-specific code lives in `static/riffboard/`, most other frontend files are upstream's, trimmed down. `tests/golden/golden.json` holds responses recorded from the original Python server, and `cargo test` checks the Rust server still matches them. [CLAUDE.md](CLAUDE.md) has a fuller map.
 
 ## Licence
 

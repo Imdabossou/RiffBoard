@@ -8,3 +8,11 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  - package-ecosystem: cargo
+    directory: /
+    target-branch: development
+    schedule:
+      interval: monthly
+    groups:
+      crates:
+        patterns: ["*"]

@@ -7,6 +7,23 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-03
+
+### Changed
+- The server is rewritten in Rust (axum + tokio). It answers every request the
+  browser makes exactly as the Python server did; tests/golden pins that.
+- Container image: one static binary on distroless/static (no shell, libc,
+  OpenSSL, Python or pip). 61 MB instead of 293 MB, about 3 MB of RAM at idle,
+  no known vulnerabilities at medium severity or above.
+- The library index is in memory (manifest-only scan); SQLite is used only for
+  leaderboard scores (same database file and schema as 0.1.0).
+- The admin CLI is now `riffboard admin <command>`; the container health check
+  is `riffboard healthcheck`.
+
+### Removed
+- The Python server and its dependencies, the drum and keys highway plugins
+  (guitar and bass charts only), drum tabs and notation streaming.
+
 ## [0.1.0] - 2026-11-02
 
 First release: fee[dB]ack (forked at 0.3.0-alpha.1) rebuilt as a public,

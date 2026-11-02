@@ -14,22 +14,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  python:
+  rust:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - run: rustup update stable && rustup default stable && rustup component add rustfmt clippy
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Tests (unit + end-to-end against the reference responses)
+        run: cargo test --locked
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-test.txt
-      - run: pip install -r requirements.txt -r requirements-test.txt
-      - name: Lint (pyflakes rules)
-        run: ruff check --select F --exclude tests server.py main.py lib plugins tools
-      - name: Tests
-        run: python -m pytest -q -p no:cacheprovider
+          tool: cargo-audit
+      - name: Dependency advisories
+        run: cargo audit --deny warnings
 
   javascript:
     runs-on: ubuntu-latest
@@ -57,12 +57,13 @@ jobs:
         run: docker build -t riffboard:ci .
       - name: Smoke test (read-only root, no capabilities)
         run: |
-          mkdir -p library && chmod a+rx library
           docker run -d --name rb -p 8000:8000 --read-only --tmpfs /tmp --cap-drop ALL \
-            --security-opt no-new-privileges -v "$PWD/library:/dlc:ro" riffboard:ci
+            --security-opt no-new-privileges -v "$PWD/tests/fixtures/library:/dlc:ro" riffboard:ci
           for i in $(seq 1 30); do curl -fsS localhost:8000/api/version && break; sleep 1; done
           curl -fsS localhost:8000/ -o /dev/null
+          test "$(curl -s localhost:8000/api/library | jq '.total')" = 3
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8000/api/settings)" = 404
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/docs)" = 404
-          docker exec rb python tools/riffboard_admin.py rescan
+          docker exec rb /app/riffboard admin rescan
+          docker exec rb /app/riffboard healthcheck
           docker logs rb

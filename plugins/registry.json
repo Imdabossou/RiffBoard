@@ -1,0 +1,244 @@
+[
+ {
+  "id": "highway_3d",
+  "name": "3D Highway",
+  "version": "3.34.1",
+  "nav": null,
+  "type": "visualization",
+  "enabled": true,
+  "description": null,
+  "category": null,
+  "icon": null,
+  "bundled": true,
+  "fallback": false,
+  "has_screen": false,
+  "has_script": true,
+  "script_type": null,
+  "min_host": null,
+  "has_settings": true,
+  "fullscreen": false,
+  "settings_category": "graphics",
+  "has_tour": true,
+  "has_styles": true,
+  "styles": "assets/plugin.css",
+  "standards": [],
+  "capabilities": {},
+  "capability_validation_warnings": [],
+  "capability_unsupported_versions": [],
+  "compatibility_shims": [],
+  "settings_schema": {},
+  "ui_contributions": {
+   "declared": {},
+   "legacy": [
+    {
+     "region": "settings",
+     "legacy_source": "settings"
+    },
+    {
+     "region": "visualization",
+     "legacy_source": "type"
+    }
+   ]
+  },
+  "runtime_domains": {},
+  "status": "ready",
+  "error": null
+ },
+ {
+  "id": "input_setup",
+  "name": "Input Setup",
+  "version": "0.1.0",
+  "nav": null,
+  "type": null,
+  "enabled": true,
+  "description": "Per-instrument input-device selection and calibration, used during onboarding and re-launchable from Settings.",
+  "category": "practice",
+  "icon": null,
+  "bundled": true,
+  "fallback": false,
+  "has_screen": false,
+  "has_script": true,
+  "script_type": null,
+  "min_host": null,
+  "has_settings": true,
+  "fullscreen": false,
+  "settings_category": null,
+  "has_tour": false,
+  "has_styles": false,
+  "styles": null,
+  "standards": [
+   "capability-pipelines.v1",
+   "plugin-runtime-idempotent.v1"
+  ],
+  "capabilities": {
+   "input-calibration": {
+    "roles": [
+     "owner"
+    ],
+    "commands": [
+     "run",
+     "status",
+     "inspect"
+    ],
+    "operations": [],
+    "requests": [],
+    "observes": [],
+    "emits": [],
+    "events": [
+     "calibration-started",
+     "calibration-done",
+     "calibration-skipped"
+    ],
+    "mode": "active",
+    "compatibility": "none",
+    "ownership": "exclusive-owner",
+    "safety": "safe",
+    "version": 1,
+    "kind": "command",
+    "description": "Owns the per-instrument input-setup wizard workflow; onboarding and Settings dispatch through the runtime."
+   },
+   "audio-input": {
+    "roles": [
+     "requester"
+    ],
+    "commands": [],
+    "operations": [],
+    "requests": [
+     "list-sources",
+     "select-source",
+     "open-source"
+    ],
+    "observes": [],
+    "emits": [],
+    "events": [],
+    "mode": "active",
+    "compatibility": "degrade-noop",
+    "ownership": "requester-only",
+    "safety": "sensitive",
+    "version": 1,
+    "description": "Picks the guitar/bass audio input device through the core audio-input domain."
+   },
+   "midi-input": {
+    "roles": [
+     "requester"
+    ],
+    "commands": [],
+    "operations": [],
+    "requests": [
+     "discover",
+     "list-sources",
+     "select-source",
+     "open-source",
+     "close-source"
+    ],
+    "observes": [],
+    "emits": [],
+    "events": [],
+    "mode": "active",
+    "compatibility": "degrade-noop",
+    "ownership": "requester-only",
+    "safety": "sensitive",
+    "version": 1,
+    "description": "Picks the keys/drums MIDI device through the core midi-input domain (Web-MIDI provider ships built-in with the domain)."
+   }
+  },
+  "capability_validation_warnings": [],
+  "capability_unsupported_versions": [],
+  "compatibility_shims": [],
+  "settings_schema": {},
+  "ui_contributions": {
+   "declared": {},
+   "legacy": [
+    {
+     "region": "settings",
+     "legacy_source": "settings"
+    }
+   ]
+  },
+  "runtime_domains": {},
+  "status": "ready",
+  "error": null
+ },
+ {
+  "id": "note_detect",
+  "name": "Note Detection",
+  "version": "1.32.0",
+  "nav": null,
+  "type": null,
+  "enabled": true,
+  "description": "Real-time note detection and scoring from your instrument.",
+  "category": "audio",
+  "icon": "assets/thumb.svg",
+  "bundled": false,
+  "fallback": false,
+  "has_screen": false,
+  "has_script": true,
+  "script_type": null,
+  "min_host": null,
+  "has_settings": true,
+  "fullscreen": false,
+  "settings_category": "mic",
+  "has_tour": false,
+  "has_styles": true,
+  "styles": "assets/plugin.css",
+  "standards": [],
+  "capabilities": {},
+  "capability_validation_warnings": [],
+  "capability_unsupported_versions": [],
+  "compatibility_shims": [],
+  "settings_schema": {},
+  "ui_contributions": {
+   "declared": {},
+   "legacy": [
+    {
+     "region": "settings",
+     "legacy_source": "settings"
+    }
+   ]
+  },
+  "runtime_domains": {},
+  "status": "ready",
+  "error": null
+ },
+ {
+  "id": "tuner",
+  "name": "Guitar/Bass Tuner",
+  "version": "1.3.4",
+  "nav": null,
+  "type": null,
+  "enabled": true,
+  "description": null,
+  "category": null,
+  "icon": null,
+  "bundled": true,
+  "fallback": false,
+  "has_screen": false,
+  "has_script": true,
+  "script_type": null,
+  "min_host": null,
+  "has_settings": true,
+  "fullscreen": false,
+  "settings_category": null,
+  "has_tour": false,
+  "has_styles": false,
+  "styles": null,
+  "standards": [],
+  "capabilities": {},
+  "capability_validation_warnings": [],
+  "capability_unsupported_versions": [],
+  "compatibility_shims": [],
+  "settings_schema": {},
+  "ui_contributions": {
+   "declared": {},
+   "legacy": [
+    {
+     "region": "settings",
+     "legacy_source": "settings"
+    }
+   ]
+  },
+  "runtime_domains": {},
+  "status": "ready",
+  "error": null
+ }
+]

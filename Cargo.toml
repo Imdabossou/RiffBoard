@@ -1,0 +1,42 @@
+[package]
+name = "riffboard"
+version = "0.2.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+description = "Public, play-only rhythm game server with per-song leaderboards (fork of fee[dB]ack)."
+repository = "https://github.com/Imdabossou/RiffBoard"
+publish = false
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs", "time", "signal", "sync"] }
+tower = { version = "0.5", default-features = false, features = ["util"] }
+tower-http = { version = "0.6", default-features = false, features = ["fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+yaml-rust2 = { version = "0.13", default-features = false }
+rusqlite = { version = "0.41", features = ["bundled"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
+percent-encoding = "2"
+getrandom = "0.3"
+sha2 = "0.10"
+subtle = "2"
+unicode-normalization = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+tokio-stream = { version = "0.1", default-features = false }
+
+[dev-dependencies]
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect"] }
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true
+panic = "abort"
+
+[profile.dev.package."*"]
+opt-level = 1

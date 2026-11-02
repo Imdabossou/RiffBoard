@@ -1,6 +1,6 @@
 # Example deployment. Put your feedpaks in ./library (subfolders are fine);
 # new ones appear within five minutes, or straight away with
-#   docker compose exec riffboard python tools/riffboard_admin.py rescan
+#   docker compose exec riffboard /app/riffboard admin rescan
 services:
   riffboard:
     build: .

@@ -48,3 +48,6 @@ Thumbs.db
 *.tmp
 *.swp
 .idea/
+
+# Rust build output
+/target
