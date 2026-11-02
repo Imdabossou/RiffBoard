@@ -17,42 +17,26 @@ static/art/
 static/audio_*
 plugins/*/
 !plugins/__init__.py
-# Core plugins ship in-tree. They're plugins-as-plugins (plugin loader
-# treats them identically to user-installed ones) but are bundled with
-# the default container image and marked `"bundled": true` in their
-# manifest. Add new core plugins as `!plugins/<id>/` exceptions.
-!plugins/achievements/
-!plugins/achievements/**
-plugins/achievements/__pycache__/
-!plugins/career/
-!plugins/career/**
-plugins/career/__pycache__/
+# Bundled plugins ship in-tree; anything else dropped into plugins/ stays
+# untracked. Add new bundled plugins as `!plugins/<id>/` exceptions.
 !plugins/highway_3d/
 !plugins/highway_3d/**
 plugins/highway_3d/__pycache__/
-!plugins/folder_library/
-!plugins/folder_library/**
-plugins/folder_library/__pycache__/
-!plugins/app_tour_library/
-!plugins/app_tour_library/**
-!plugins/app_tour_settings/
-!plugins/app_tour_settings/**
-!plugins/capability_inspector/
-!plugins/capability_inspector/**
-!plugins/minigames/
-!plugins/minigames/**
-plugins/minigames/__pycache__/
-!plugins/tuner/
-!plugins/tuner/**
-plugins/tuner/__pycache__/
-!plugins/input_setup/
-!plugins/input_setup/**
 !plugins/drum_highway_3d/
 !plugins/drum_highway_3d/**
 plugins/drum_highway_3d/__pycache__/
 !plugins/keys_highway_3d/
 !plugins/keys_highway_3d/**
 plugins/keys_highway_3d/__pycache__/
+!plugins/tuner/
+!plugins/tuner/**
+plugins/tuner/__pycache__/
+!plugins/input_setup/
+!plugins/input_setup/**
+plugins/input_setup/__pycache__/
+!plugins/note_detect/
+!plugins/note_detect/**
+plugins/note_detect/__pycache__/
 node_modules/
 test-results/
 playwright-report/
@@ -64,4 +48,3 @@ Thumbs.db
 *.tmp
 *.swp
 .idea/
-plugins/support_creators

@@ -1,0 +1,15 @@
+{
+  "id": "note_detect",
+  "name": "Note Detection",
+  "version": "1.32.0",
+  "private": false,
+  "script": "screen.js",
+  "styles": "assets/plugin.css",
+  "settings": {
+    "html": "settings.html",
+    "category": "mic"
+  },
+  "category": "audio",
+  "description": "Real-time note detection and scoring from your instrument.",
+  "icon": "assets/thumb.svg"
+}
