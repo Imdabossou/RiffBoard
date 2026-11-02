@@ -14,8 +14,13 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+# pip (and the copies ensurepip keeps) are only needed to build the image;
+# they vendor their own urllib3/msgpack/setuptools, which scanners flag. The
+# app never installs anything at runtime, so remove them from the final image.
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall -y pip setuptools wheel 2>/dev/null; \
+    rm -rf /usr/local/lib/python3.12/ensurepip /usr/local/lib/python3.12/site-packages/pip* \
+           /usr/local/lib/python3.12/site-packages/setuptools* /usr/local/bin/pip*
 
 COPY lib/ /app/lib/
 COPY static/ /app/static/
