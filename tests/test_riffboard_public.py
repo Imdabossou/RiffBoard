@@ -163,7 +163,7 @@ def _start(rb, fn="song.feedpak", arr=0):
 
 
 def _submit(rb, rid, **kw):
-    body = {"run_id": rid, "name": "Jamie", "hits": 20, "misses": 5, "best_streak": 12}
+    body = {"run_id": rid, "name": "Riffer", "hits": 20, "misses": 5, "best_streak": 12}
     body.update(kw)
     return rb.post("/api/scores", json=body)
 
@@ -177,10 +177,10 @@ def test_full_run_posts_and_ranks(rb):
     assert d["rank"] == 1
     assert d["score"] == round(20 * 100 * (20 / 25))
     board = rb.get("/api/scores/song.feedpak").json()["scores"]
-    assert [row["name"] for row in board] == ["Jamie"]
+    assert [row["name"] for row in board] == ["Riffer"]
     rb.get("/api/song/song.feedpak")  # index the song (the scan is stubbed out)
     boards = rb.get("/api/leaderboards").json()["boards"]
-    assert boards and boards[0]["title"] == "Song" and boards[0]["top_name"] == "Jamie"
+    assert boards and boards[0]["title"] == "Song" and boards[0]["top_name"] == "Riffer"
 
 
 def test_server_computes_score_ignoring_client_numbers(rb):
@@ -230,11 +230,11 @@ def test_best_run_per_name_and_ban(rb):
         assert _submit(rb, rid, hits=hits, misses=25 - hits, best_streak=0).status_code == 200
     board = rb.get("/api/scores/song.feedpak").json()["scores"]
     assert len(board) == 1 and board[0]["hits"] == 20
-    rb.server.leaderboard.ban("  JAMIE ")
+    rb.server.leaderboard.ban("  RIFFER ")
     assert rb.get("/api/scores/song.feedpak").json()["scores"] == []
     rid = _start(rb)
     rb.clock["t"] += 30
-    assert _submit(rb, rid, name="jamie").status_code == 403
+    assert _submit(rb, rid, name="riffer").status_code == 403
 
 
 def test_unknown_song_and_arrangement(rb):
@@ -278,5 +278,5 @@ def test_admin_needs_loopback_token_and_no_proxy_headers(rb):
 
 def test_invisible_characters_are_stripped_from_names():
     import leaderboard
-    assert leaderboard.clean_name("Ja\u202emie\u200b") == "Jamie"
+    assert leaderboard.clean_name("Rif\u202efer\u200b") == "Riffer"
     assert leaderboard.clean_name("  Big   Dog ") == "Big Dog"
