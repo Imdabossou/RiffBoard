@@ -55,6 +55,37 @@ fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for e in std::fs::read_dir(from).unwrap().flatten() {
+        let dest = to.join(e.file_name());
+        if e.path().is_dir() {
+            copy_dir(&e.path(), &dest);
+        } else {
+            std::fs::copy(e.path(), &dest).unwrap();
+        }
+    }
+}
+
+fn set_mtime(path: &std::path::Path, secs_ago: u64) {
+    let t = std::time::SystemTime::now() - Duration::from_secs(secs_ago);
+    let f = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+    f.set_modified(t).unwrap();
+}
+
+/// A private copy of the fixture library with fixed relative mtimes (the
+/// "recent" sort depends on them; a git checkout gives every file the same).
+fn fixture_library(config: &std::path::Path) -> PathBuf {
+    let lib = config.join("library");
+    copy_dir(&root().join("tests/fixtures/library"), &lib);
+    set_mtime(&lib.join("Fixture Band/Rich Song.feedpak"), 300);
+    set_mtime(&lib.join("Fixture Band/Plain Bass.feedpak"), 200);
+    for f in ["manifest.yaml", "arrangements/rhythm.json"] {
+        set_mtime(&lib.join("Another Artist/Dir Song.feedpak").join(f), 100);
+    }
+    lib
+}
+
 async fn start(tag: &str) -> Server {
     let port = TcpListener::bind("127.0.0.1:0")
         .unwrap()
@@ -62,8 +93,9 @@ async fn start(tag: &str) -> Server {
         .unwrap()
         .port();
     let config = tempdir::Dir::new(tag);
+    let library = fixture_library(&config.0);
     let child = Command::new(env!("CARGO_BIN_EXE_riffboard"))
-        .env("DLC_DIR", root().join("tests/fixtures/library"))
+        .env("DLC_DIR", &library)
         .env("CONFIG_DIR", &config.0)
         .env("STATIC_DIR", root().join("static"))
         .env("PLUGINS_DIR", root().join("plugins"))
