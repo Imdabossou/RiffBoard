@@ -61,7 +61,22 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
   Result at a 12x slowdown without a microphone: 46 → 59.5 fps, frames
   over 25 ms 524 → 18, and the resolution stays at 100% instead of 25%.
 
+- Player controls that work on a phone: a back button (top left), a settings
+  cog (bottom left) that opens the player tools as a labelled row (Visuals,
+  Input, Mixer, Lyrics, Panes, Plugins, Sections, More) instead of an
+  invisible hover strip, and a mic on/off toggle next to the mode pill, so
+  practice works without a microphone.
+- The mode chooser says up front when score runs can't work (no microphone,
+  or a non-https address).
+
 ### Fixed
+- Note detection no longer retries an unavailable microphone forever: a
+  failure that won't fix itself (insecure page, permission denied, no device)
+  stops automatic retries for the session, and it is reported once as a toast
+  instead of a blocking alert every few seconds. Tapping the mic toggle tries
+  again.
+- The "?" tour button is gone (the tour system isn't loaded any more), as are
+  the drum-part and editor rows in the player's More panel.
 - Leftover "Slopsmith"/"FeedBack" names in visible text, including the
   microphone-needs-HTTPS message.
 - Note detection settings no longer offer server-side card auto-save or
