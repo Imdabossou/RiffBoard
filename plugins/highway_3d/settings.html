@@ -933,6 +933,8 @@
     <script>
         (function () {
             const DEFAULTS = { style: 'particles', intensity: 0.5, reactive: true, palette: 'default', bgTheme: 'default', hwTheme: 'default', showFretOnNote: true, fretNumberGhostScope: 'chords', cameraSmoothing: 0.5, zoomSmoothing: 0.5, tiltSmoothing: 0.5, cameraLockLow: false, cameraLockZoom: 0.5, cameraMode: 'lookahead', nutHeadstockVisible: true, tuningLabelsVisible: true, nutColor: '#f5f3f0', headstockColor: '#d4b48a', textSize: 0.5, vibrancy: 0.85, glow: 0.25, customImageDataUrl: '', customImageName: '', customVideoName: '', chordDiagramVisible: true, chordDiagramSize: 0.5, chordDiagramPosition: 'tl', fretColumnMarkerCadence: 1, projectionVisible: true, inlayLabelsVisible: false, sectionLabelsOnHighway: false, sectionHudVisible: false, sectionHudPosition: 'tr', sectionHudSize: 0.5, toneHudVisible: false, toneHudPosition: 'tl', toneHudSize: 0.5, fpsVisible: false, fretDividersVisible: true, slideArrowApproachVisible: true, slideArrowNeckVisible: true, slideArrowChainPreviewVisible: true };
+            // RiffBoard: mirror the renderer's lite-device defaults (screen.js _H3D_LITE).
+            Object.assign(DEFAULTS, (window.h3dLite && window.h3dLite.defaults) || {});
             const VALID_STYLES = new Set(['off', 'particles', 'silhouettes', 'lights', 'geometric', 'butterchurn', 'image', 'video']);
             // Scene color themes — the single id+label source for BOTH the
             // Background and Highway dropdowns AND the validator below. The
@@ -1361,11 +1363,11 @@
                     return v == null ? def : !(v === 'false' || v === '0');
                 };
                 const _setChk = (id, on) => { const el = document.getElementById(id); if (el) el.checked = on; };
-                _setChk('h3d-sparks',       _bgBool('sparks', true));
+                _setChk('h3d-sparks',       _bgBool('sparks', !(window.h3dLite && window.h3dLite.active)));
                 _setChk('h3d-cinematic',    _bgBool('cinematic', true));
                 _setChk('h3d-streakfx',     _bgBool('streakFx', true));
                 _setChk('h3d-verdictmarks', _bgBool('verdictMarks', true));
-                _setChk('h3d-bloom',        _bgBool('bloom', true));
+                _setChk('h3d-bloom',        _bgBool('bloom', !(window.h3dLite && window.h3dLite.active)));
                 _setChk('h3d-timingfx',     _bgBool('timingFx', true));
                 const _hf = document.getElementById('h3d-hitfx');
                 if (_hf) {

@@ -24,8 +24,29 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
 - Per-site branding from `CONFIG_DIR/site/site.json`: name, tagline, hero
   copy and image, logo, favicon, About card with links, and dark/light
   colours (`/api/site`, `/site.css`, `/site/<image>`).
+- Two play modes, picked each time a song starts. **Play for score**: the
+  whole song straight through at full speed and difficulty; seeking, looping
+  and speed controls are hidden and pausing ends the run. **Practice**: every
+  control, never ranked. A practice run can be restarted as a score run.
+- Song map: a section strip across the top of the player with the playhead.
+  Tap or drag it to jump in practice mode; it only shows progress in score mode.
+- Phones, tablets and low-end machines get a lighter 3D highway by default
+  (no bloom, animated background or sparks; resolution capped at 1.5x). Any
+  setting the visitor changes still wins.
+- The automatic resolution scaler also reacts when the GPU, not JavaScript,
+  is the bottleneck (frames arriving late), which is the usual case on phones.
+- The container image ships brotli/gzip copies of the frontend; the server
+  sends them to browsers that accept them (about 4 MB of JavaScript → under 1 MB).
+
+### Fixed
+- Leftover "Slopsmith"/"FeedBack" names in visible text, including the
+  microphone-needs-HTTPS message.
+- Note detection settings no longer offer server-side card auto-save or
+  recording (the public build has no backend for them); "Save" on the results
+  card downloads in the browser without trying the server first.
 
 ### Removed
+- The unused Lottie animation library is no longer loaded (~300 KB).
 - The Python server and its dependencies, the drum and keys highway plugins
   (guitar and bass charts only), drum tabs and notation streaming.
 

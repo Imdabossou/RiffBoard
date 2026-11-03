@@ -662,7 +662,7 @@
             lifecycle: 'plugin-defined',
             label: 'Plugin-defined',
             tone: 'info',
-            summary: 'Declared by a plugin or test fixture rather than registered as a core FeedBack domain.',
+            summary: 'Declared by a plugin or test fixture rather than registered as a core RiffBoard domain.',
         };
     }
 

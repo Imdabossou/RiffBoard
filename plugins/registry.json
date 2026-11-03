@@ -2,7 +2,7 @@
  {
   "id": "highway_3d",
   "name": "3D Highway",
-  "version": "3.34.1",
+  "version": "3.34.2",
   "nav": null,
   "type": "visualization",
   "enabled": true,
@@ -162,7 +162,7 @@
  {
   "id": "note_detect",
   "name": "Note Detection",
-  "version": "1.32.0",
+  "version": "1.32.1",
   "nav": null,
   "type": null,
   "enabled": true,

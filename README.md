@@ -14,9 +14,10 @@ RiffBoard is a fork of [fee[dB]ack](https://github.com/got-feedback/feedBack), a
 
 ## Features
 
-- **Play in the browser.** The 3D note highway for guitar and bass (keys and drum highways come along from upstream), with lyrics, sections, count-in, A/V calibration and left-handed mode.
+- **Play in the browser.** The 3D note highway for guitar and bass, with lyrics, sections, count-in, A/V calibration and left-handed mode. Phones get a lighter rendering profile automatically.
 - **Real note detection.** The bundled note-detection plugin listens to your audio input and judges every note. Audio never leaves the visitor's device.
-- **Leaderboards.** Every song part has its own board. A run counts when the whole song is played at full speed and difficulty, without skipping, rewinding or looping. Each name keeps its best score.
+- **Score and practice modes.** Each song starts with a choice. *Play for score* runs the whole song straight through at full speed (no pausing, skipping or slowing down). *Practice* unlocks everything: pause, rewind, loops, speed and difficulty, and a song map across the top to jump to any section.
+- **Leaderboards.** Every song part has its own board for score runs. Each name keeps its best score.
 - **No accounts.** Visitors type a name when they post a score. Settings, favourites and practice history live in their own browser.
 - **Light and dark themes.** Follows the system setting, with a remembered override. The player always stays dark.
 - **Hands-off library.** Drop `.feedpak` files into the library folder and they appear within five minutes.

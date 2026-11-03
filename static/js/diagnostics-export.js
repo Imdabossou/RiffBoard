@@ -43,7 +43,7 @@ function _diagRedactFromUI() {
 // descriptions for the preview UI. Only paths that show up in
 // previews need entries — unknown paths fall back to the path itself.
 const _DIAG_FILE_LABELS = {
-    'system/version.json':   { label: 'App version',    desc: 'FeedBack version, Python, OS' },
+    'system/version.json':   { label: 'App version',    desc: 'App version and browser' },
     'system/env.json':       { label: 'Environment',    desc: 'Allowlisted env vars (LOG_LEVEL, etc.). No secrets.' },
     'system/hardware.json':  { label: 'Hardware (server-side)', desc: 'CPU, RAM, GPU. In Docker this reflects the container, not the host.' },
     'system/plugins.json':   { label: 'Plugins',        desc: 'Loaded plugins + git commit + orphan detection.' },

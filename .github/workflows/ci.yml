@@ -64,6 +64,7 @@ jobs:
           test "$(curl -s localhost:8000/api/library | jq '.total')" = 3
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8000/api/settings)" = 404
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/docs)" = 404
+          curl -fsS -H 'Accept-Encoding: br' -D - -o /dev/null localhost:8000/static/app.js | grep -qi '^content-encoding: br'
           docker exec rb /app/riffboard admin rescan
           docker exec rb /app/riffboard healthcheck
           docker logs rb

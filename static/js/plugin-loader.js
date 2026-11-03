@@ -547,7 +547,7 @@ export async function loadPlugins() {
                 // plugin via the manage-plugin flow and brick a feature
                 // that's expected to "just work".
                 if (plugin.bundled) {
-                    const bundledDesc = 'This plugin ships with FeedBack core and is expected to be present.';
+                    const bundledDesc = 'This plugin ships with RiffBoard and is expected to be present.';
                     const badge = document.createElement('span');
                     badge.className = 'inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-purple-400/30 bg-purple-500/10 text-purple-300';
                     badge.title = bundledDesc;

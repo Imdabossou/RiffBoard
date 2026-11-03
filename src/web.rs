@@ -252,8 +252,16 @@ pub fn router(state: Arc<AppState>) -> Router {
 
 // ── Static / meta ────────────────────────────────────────────────────────────
 
+/// Serves a file, preferring a precompressed `<file>.br` / `<file>.gz` sibling
+/// when the client accepts it (the container image ships them for the
+/// frontend; without them this is a plain file response).
 async fn serve_file(path: PathBuf, req: Request) -> Response {
-    match ServeFile::new(path).oneshot(req).await {
+    match ServeFile::new(path)
+        .precompressed_br()
+        .precompressed_gzip()
+        .oneshot(req)
+        .await
+    {
         Ok(r) => r.map(Body::new),
         Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, "read failed"),
     }
@@ -282,7 +290,12 @@ async fn static_file(State(s): S, req: Request) -> Response {
     }
     .parse()
     .unwrap_or_default();
-    match ServeDir::new(&s.cfg.static_dir).oneshot(req).await {
+    match ServeDir::new(&s.cfg.static_dir)
+        .precompressed_br()
+        .precompressed_gzip()
+        .oneshot(req)
+        .await
+    {
         Ok(r) => no_cache(r.map(Body::new)),
         Err(_) => err(StatusCode::NOT_FOUND, "not found"),
     }

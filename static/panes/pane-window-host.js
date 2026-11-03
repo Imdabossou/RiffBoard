@@ -232,7 +232,7 @@
         // touching nothing else about how it looks.
         el.classList.add('fb-paned');
         root.appendChild(doc.adoptNode(el));
-        doc.title = spec.title + ' — fee[dB]ack';
+        doc.title = spec.title + ' — RiffBoard';
 
         // Keep the pane window's theme and interface scale in step with the app for
         // as long as it is open. Stopped in unplace().

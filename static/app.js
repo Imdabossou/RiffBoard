@@ -1809,6 +1809,7 @@ window.onPhraseNext = onPhraseNext;
 // with a cached element ref (re-resolved if detached).
 let _hudTimeEl = null;
 let _hudTimeLast = '';
+let _spTick = 0;
 setInterval(() => {
     let ct = _audioTime();
     const dur = _audioDuration();
@@ -1846,9 +1847,14 @@ setInterval(() => {
             _maybeRefreshSectionPracticeDuration(dur);
         }
     }
-    _ensureSectionPracticeBar();
-    if (_sectionPracticeBarIsReady() && _sectionPracticeSourceSections().length) {
-        _updateSectionPracticeHighlight(ct);
+    // RiffBoard: the section-practice chip highlight queries and toggles DOM
+    // classes; at 60 Hz that was ~5% of a phone's main thread for a highlight
+    // that changes every few seconds. ~8 Hz is indistinguishable.
+    if ((++_spTick & 7) === 0) {
+        _ensureSectionPracticeBar();
+        if (_sectionPracticeBarIsReady() && _sectionPracticeSourceSections().length) {
+            _updateSectionPracticeHighlight(ct);
+        }
     }
     if (!isCountingIn()) window.highway.setTime(ct);
 }, 1000 / 60);

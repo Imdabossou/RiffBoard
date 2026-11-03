@@ -169,3 +169,172 @@ body { background-color: rgb(var(--fb-sidebar)); color: rgb(var(--fb-text)); }
 #alpha-warning-banner {
     display: none !important;
 }
+
+/* ── Play modes (static/riffboard/modes.js) ──────────────────────────────────
+   Score mode plays a song straight through, so the transport controls that
+   would seek, loop, slow down or change difficulty are hidden. Practice mode
+   shows everything. */
+#player.rb-mode-score .v3-speed-cluster,
+#player.rb-mode-score .v3-transport-mid .v3-seek,
+#player.rb-mode-score .section-practice-control--v3,
+#player.rb-mode-score #section-practice-bar,
+#player.rb-mode-score .v3-pop-row:has(#mastery-slider),
+#player.rb-mode-score .v3-pop-row:has(#arr-select),
+#player.rb-mode-score .v3-pop-row:has(#btn-loop-a),
+#player.rb-mode-score .v3-pop-row:has(#saved-loops),
+#player.rb-mode-score .v3-pop-row:has(#btn-edit-region) {
+    display: none !important;
+}
+
+.rb-mode-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+    padding: 0.15rem 0.6rem 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: rgb(0 0 0 / 0.45);
+    color: rgb(var(--fb-text));
+    pointer-events: auto;
+}
+.rb-mode-dot { width: 0.45rem; height: 0.45rem; border-radius: 999px; background: currentColor; }
+.rb-mode-pill-score { color: rgb(var(--fb-gold)); }
+.rb-mode-pill-practice { color: rgb(var(--fb-textDim)); }
+.rb-mode-switch {
+    margin-left: 0.3rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background: rgb(var(--fb-primary));
+    color: #fff;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 600;
+}
+.rb-mode-switch:hover { background: rgb(var(--fb-primaryHi)); }
+
+/* Mode chooser */
+.rb-mode-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    text-align: left;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(var(--fb-border));
+    background: rgb(var(--fb-bg) / 0.6);
+    transition: border-color 0.15s, background-color 0.15s;
+}
+.rb-mode-card:hover, .rb-mode-card:focus-visible { border-color: rgb(var(--fb-primary)); background: rgb(var(--fb-bg)); }
+.rb-mode-card-primary { border-color: rgb(var(--fb-primary) / 0.7); background: rgb(var(--fb-primary) / 0.12); }
+.rb-mode-card-primary:hover, .rb-mode-card-primary:focus-visible { background: rgb(var(--fb-primary) / 0.2); }
+.rb-mode-card-title { font-weight: 700; font-size: 1.05rem; color: rgb(var(--fb-text)); }
+.rb-mode-card-text { font-size: 0.8rem; line-height: 1.35; color: rgb(var(--fb-textDim)); }
+.rb-part {
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid rgb(var(--fb-border));
+    font-size: 0.85rem;
+    color: rgb(var(--fb-text));
+}
+.rb-part:hover { border-color: rgb(var(--fb-primary)); }
+.rb-part.rb-part-on { background: rgb(var(--fb-primary)); border-color: rgb(var(--fb-primary)); color: #fff; }
+
+/* Song map: section strip + playhead across the top of the player. */
+.rb-song-map {
+    --rb-map-h: 22px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--rb-map-h);
+    z-index: 25;
+    background: rgb(0 0 0 / 0.55);
+    overflow: visible;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    contain: layout style;
+}
+@media (pointer: coarse) { .rb-song-map { --rb-map-h: 30px; } }
+#player.rb-has-map #player-hud { top: var(--rb-map-offset, 22px); }
+@media (pointer: coarse) { #player.rb-has-map #player-hud { --rb-map-offset: 30px; } }
+.rb-map-blocks { position: absolute; inset: 0; overflow: hidden; }
+.rb-map-block {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-right: 1px solid rgb(0 0 0 / 0.5);
+    opacity: 0.45;
+    transition: opacity 0.2s;
+}
+.rb-map-block span {
+    font-size: 10px;
+    font-weight: 600;
+    color: rgb(255 255 255 / 0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 4px;
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+}
+.rb-map-block.rb-map-now { opacity: 1; }
+.rb-sec-intro { background: #3b82f6; }
+.rb-sec-verse { background: #16a34a; }
+.rb-sec-pre { background: #65a30d; }
+.rb-sec-chorus { background: #ca8a04; }
+.rb-sec-bridge { background: #9333ea; }
+.rb-sec-solo { background: #dc2626; }
+.rb-sec-breakdown { background: #ea580c; }
+.rb-sec-riff { background: #0891b2; }
+.rb-sec-outro { background: #64748b; }
+.rb-sec-rest { background: #334155; }
+.rb-sec-other { background: #475569; }
+/* Generic "Section N" charts: alternate shades so the boundaries read. */
+.rb-sec-other:nth-child(even) { background: #5b6b82; }
+.rb-map-fill {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: rgb(var(--fb-primaryHi));
+    transform-origin: left center;
+    transform: scaleX(0);
+    pointer-events: none;
+    will-change: transform;
+}
+.rb-map-head {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -1px;
+    width: 2px;
+    background: #fff;
+    box-shadow: 0 0 4px rgb(255 255 255 / 0.8);
+    pointer-events: none;
+    will-change: transform;
+}
+.rb-map-tip {
+    position: absolute;
+    top: calc(100% + 4px);
+    transform: translateX(-50%);
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgb(0 0 0 / 0.85);
+    color: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+.rb-song-map.rb-map-seekable { cursor: pointer; }
+.rb-song-map.rb-map-seekable:hover .rb-map-block { opacity: 0.7; }
+.rb-song-map.rb-map-seekable:hover .rb-map-block.rb-map-now { opacity: 1; }
+.rb-song-map:focus-visible { outline: 2px solid rgb(var(--fb-primary)); outline-offset: -2px; }

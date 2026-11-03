@@ -316,7 +316,7 @@ const _ND_AUTO_ENABLE_RETRY_MS = 1500;
 // exact build that produced it. The script tag has no `import`/`fetch`
 // hook to read package.json at load time, so this is the single
 // hand-maintained constant the diagnostic path keys off of.
-const _ND_VERSION = '1.32.0';
+const _ND_VERSION = '1.32.1';
 
 // Bleed-rescue tuning for the low-bass blind spot. A bass DI's fundamental is
 // weaker than its 2nd harmonic and an open string / neighbour often rings the
@@ -1217,7 +1217,9 @@ async function _ndSaveCard(data, overlayEl, opts) {
     if (!blob) return { ok: false };
     const name = auto ? _ndAutoSaveFilename(data) : _ndShareCardFilename(data);
     const dir = _ndSaveDir();
-    try {
+    // RiffBoard: there is no save-card backend (the server 404s the route), so
+    // skip the upload and go straight to the browser download below.
+    if (!window.riffboard) try {
         const qs = '?name=' + encodeURIComponent(name)
             + (dir ? '&dir=' + encodeURIComponent(dir) : '')
             + (auto ? '&auto=1' : '');
@@ -4385,7 +4387,7 @@ function createNoteDetector(options = {}) {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                     const isHttp = location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
                     const msg = isHttp
-                        ? 'Microphone access requires HTTPS. You are accessing Slopsmith over HTTP from a non-localhost address. Either:\n\n1. Use a reverse proxy with HTTPS (recommended)\n2. Access via localhost\n3. Add a self-signed certificate to the server'
+                        ? 'Microphone access needs a secure connection. Open this site with an https:// address and try again.'
                         : 'Microphone access is not available in this browser. Use Chrome or Edge.';
                     throw new Error(msg);
                 }
@@ -9157,7 +9159,7 @@ function createNoteDetector(options = {}) {
                     : '');
             html = `
                 ${_calWizardDetectBanner(snap)}
-                <p class="text-gray-300 text-xs mb-2">Confirm which input channel Slopsmith is listening to. Strum while auto-detect runs.</p>
+                <p class="text-gray-300 text-xs mb-2">Confirm which input channel is being listened to. Strum while auto-detect runs.</p>
                 <div class="text-[11px] text-gray-300 font-mono space-y-1 mb-2">
                     <div>Device: ${_calWizardDeviceLabel()}</div>
                     <div>Channel: ${snap.channel || '—'}</div>
@@ -9273,7 +9275,7 @@ function createNoteDetector(options = {}) {
             const runBtnCls = allRunning ? ' opacity-60 cursor-not-allowed' : '';
             html = `
                 ${_calWizardDetectBanner(snap)}
-                <p class="text-gray-300 text-xs mb-2">Quick check that Slopsmith hears open strings. This is simpler than Technique Assessment — just confirms basic detection works.</p>
+                <p class="text-gray-300 text-xs mb-2">Quick check that your open strings are heard. This is simpler than Technique Assessment — just confirms basic detection works.</p>
                 <p class="text-[10px] text-gray-500 mb-2">Targets match the current song tuning. Use the same tone and pitch-shift path you will play the song with.</p>
                 <p class="text-[10px] text-gray-500 mb-2">Load a song first for song tuning in the tuner.</p>
                 ${instrumentPickerHtml}
@@ -10901,7 +10903,7 @@ function createNoteDetector(options = {}) {
         }
 
         if (stepId === 'intro') {
-            html += `<p class="text-gray-300 text-xs mb-3"><strong class="text-gray-200">Calibration Wizard</strong> sets up your input. <strong class="text-gray-200">Technique Assessment</strong> checks how well Slopsmith hears your playing.</p>
+            html += `<p class="text-gray-300 text-xs mb-3"><strong class="text-gray-200">Calibration Wizard</strong> sets up your input. <strong class="text-gray-200">Technique Assessment</strong> checks how well your playing is heard.</p>
                 <p class="text-gray-300 text-xs mb-3">Each check looks at <strong class="text-gray-200">signal clarity</strong>, whether the <strong class="text-gray-200">main note</strong> is present, and <strong class="text-gray-200">tuning match</strong>. Read-only — nothing here changes gameplay settings.</p>
                 <button type="button" class="nd-cal-lab-start-basic w-full py-2.5 bg-accent hover:bg-accent-light rounded-lg text-xs font-semibold text-white mb-2">Start Basic Assessment</button>
                 <p class="text-[10px] text-gray-500 mb-3">Checks input level, open strings, one fretted note, and one power chord. Best first step.</p>
@@ -16068,7 +16070,7 @@ function createNoteDetector(options = {}) {
                 if (!localBundle || !doRetry) return;
                 retryBtn.disabled = true;
                 retryBtn.textContent = 'Retrying…';
-                setStatus('info', 'Re-uploading the saved bundle to pCloud — no re-recording needed. Don’t close Slopsmith yet.');
+                setStatus('info', 'Re-uploading the saved bundle to pCloud — no re-recording needed. Don’t close this page yet.');
                 let result = null;
                 const p = doRetry(localBundle);
                 _activeUpload = p;
@@ -16104,7 +16106,7 @@ function createNoteDetector(options = {}) {
                 submitBtn.disabled = true;
                 submitBtn.textContent = 'Uploading…';
                 cancelBtn.textContent = 'Hide';
-                setStatus('info', 'Bundling the WAV, detect-stream, and manifest, then shipping to pCloud. Don’t close Slopsmith yet — this can take a few seconds on a slow uplink.');
+                setStatus('info', 'Bundling the WAV, detect-stream, and manifest, then shipping to pCloud. Don’t close this page yet — this can take a few seconds on a slow uplink.');
 
                 let result = null;
                 const p = doUpload(formData);
@@ -16777,8 +16779,8 @@ function createNoteDetector(options = {}) {
     const _DIAGNOSTIC_TRACK_CATALOG = [
         {
             id: 'basic-guitar-6',
-            title: 'Slopsmith Diagnostic — Basic Guitar',
-            artist: 'Slopsmith',
+            title: 'Diagnostic — Basic Guitar',
+            artist: 'RiffBoard',
             arrangement: 'Diagnostic Guitar',
             filenameIncludes: 'slopsmith-diagnostic-basic-guitar.sloppak',
             dlcRelativePath: 'diagnostics-builtin/slopsmith-diagnostic-basic-guitar.sloppak',
@@ -16919,7 +16921,7 @@ function createNoteDetector(options = {}) {
         if (typeof window.playSong !== 'function') {
             _ndSetDiagnosticLaunchStatus(
                 panel,
-                'Diagnostic track could not be loaded. Restart Slopsmith or rescan your library.',
+                'Diagnostic track could not be loaded. Reload the page and try again.',
             );
             return;
         }
@@ -16943,7 +16945,7 @@ function createNoteDetector(options = {}) {
             console.warn('[note_detect] diagnostic launch failed:', e);
             _ndSetDiagnosticLaunchStatus(
                 panel,
-                'Diagnostic track could not be loaded. Restart Slopsmith or rescan your library.',
+                'Diagnostic track could not be loaded. Reload the page and try again.',
             );
             return;
         }
@@ -16959,7 +16961,7 @@ function createNoteDetector(options = {}) {
 
         _ndSetDiagnosticLaunchStatus(
             panel,
-            'Diagnostic track is not available yet. Restart Slopsmith or rescan the library. If it still does not appear, the built-in diagnostic pack may not be installed.',
+            'Diagnostic track is not available yet. Reload the page and try again. If it still does not appear, the built-in diagnostic pack may not be installed.',
         );
     }
 

@@ -15,11 +15,21 @@ COPY src ./src
 RUN touch src/main.rs && CARGO_BUILD_JOBS=2 cargo build --release --locked \
     && mkdir -p /out/config
 
+# Precompressed copies of the frontend (brotli + gzip). The server sends them
+# to browsers that accept them: the JavaScript is ~4 MB raw, under 1 MB as br.
+FROM alpine:3 AS assets
+RUN apk add --no-cache brotli gzip
+COPY static /assets/static
+COPY plugins /assets/plugins
+RUN find /assets -type f -size +1k \( -name '*.js' -o -name '*.mjs' -o -name '*.css' -o -name '*.html' \
+        -o -name '*.json' -o -name '*.svg' -o -name '*.wasm' -o -name '*.txt' \) \
+        -exec brotli -q 11 -k {} \; -exec gzip -9 -k -n {} \;
+
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=build /src/target/release/riffboard /app/riffboard
-COPY static /app/static
-COPY plugins /app/plugins
+COPY --from=assets /assets/static /app/static
+COPY --from=assets /assets/plugins /app/plugins
 # An owned, empty /config so a fresh named volume is writable by nonroot.
 COPY --from=build --chown=nonroot:nonroot /out/config /config
 ENV DLC_DIR=/dlc \

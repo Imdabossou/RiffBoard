@@ -392,7 +392,7 @@ const LEGACY_PLAN_SCHEMA = 'slopsmith.audio_effects.chain_plan.v1';
             executorId: 'desktop-native',
             pluginId: 'feedBack-desktop',
             routeKey: DEFAULT_ROUTE_KEY,
-            label: 'FeedBack Desktop native audio',
+            label: 'Desktop native audio',
             enabled: true,
             availability: 'available',
             sourceMode: 'native',

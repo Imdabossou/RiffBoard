@@ -100,7 +100,7 @@ test('fret inlay dots use renderOrder 3, above lane (1) and dividers (2)', () =>
     // The dots must draw after the lane/dividers but stay below the depth-layer stack.
     assert.match(
         src(),
-        /d\.renderOrder\s*=\s*3\s*;/,
+        /dots\.renderOrder\s*=\s*3\s*;/,
         'fret inlay dots must use renderOrder = 3 so the lane no longer hides them',
     );
 });

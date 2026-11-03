@@ -83,6 +83,10 @@
                 </span>
             </span>
         </label>
+        <!-- RiffBoard: auto-save and the save folder need a local backend that
+             the public build doesn't have (Save falls back to a browser
+             download), so they're hidden. -->
+        <div hidden style="display:none">
         <label class="flex items-start gap-3 cursor-pointer select-none mb-4">
             <input type="checkbox" id="nd-autosave-card"
                    class="mt-0.5 rounded border-gray-600 bg-dark-700 text-accent focus:ring-accent/40">
@@ -109,6 +113,7 @@
         <p class="text-[11px] text-gray-500 leading-relaxed mt-1">
             Where the <strong>Save</strong> button (and auto-save, if on) write the PNG. Leave blank to use your Pictures folder (e.g. <code>C:\Users\you\Pictures</code>). Must be an absolute path.
         </p>
+        </div>
         <label for="nd-queue-delay" class="block text-xs text-gray-300 mb-1 mt-4">Playlist auto-advance delay (seconds)</label>
         <input type="number" id="nd-queue-delay" min="0" step="1" placeholder="10"
                class="w-32 bg-dark-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:ring-accent/40 focus:border-accent">
@@ -147,7 +152,9 @@
          play is captured to static/note_detect_recordings/ for later
          analysis. Off by default; opt in here. Persisted via the plugin's
          saveSettings(). -->
-    <div class="bg-dark-700/40 border border-gray-800 rounded-xl p-4 mb-4">
+    <!-- RiffBoard: hidden. Recordings are written on the server, which the
+         public build doesn't allow. -->
+    <div class="bg-dark-700/40 border border-gray-800 rounded-xl p-4 mb-4" hidden style="display:none">
         <label class="flex items-start gap-3 cursor-pointer select-none">
             <input type="checkbox" id="nd-auto-record"
                    class="mt-0.5 rounded border-gray-600 bg-dark-700 text-accent focus:ring-accent/40">

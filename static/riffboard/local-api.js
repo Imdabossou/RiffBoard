@@ -18,6 +18,9 @@
 (function () {
     'use strict';
     if (window.riffboardLocal) return;
+    // Marker other modules (and the bundled plugins) check to know they're
+    // running in the public RiffBoard build.
+    window.riffboard = window.riffboard || {};
 
     const realFetch = window.fetch.bind(window);
     const NS = 'rb:';

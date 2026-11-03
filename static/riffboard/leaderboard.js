@@ -6,6 +6,7 @@
  *   first song:play   ask the server for a run ticket (POST /api/runs)
  *   note:hit/miss     tally the run (events from the note_detect plugin)
  *   seek/loop/speed/difficulty changes mark the run as practice (not ranked)
+ *   practice mode (static/riffboard/modes.js) never asks for a ticket
  *   song:ended        show the result; a ranked run can post a name + score
  *
  * The server re-checks everything it can (see lib/routers/scores.py); the
@@ -16,6 +17,9 @@
     'use strict';
     const sm = window.feedBack;
     if (!sm || typeof sm.on !== 'function') return;
+    const rb = (window.riffboard = window.riffboard || {});
+    const PRACTICE_MODE = 'Practice mode';
+    const getMode = () => (typeof rb.getMode === 'function' ? rb.getMode() : 'score');
 
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
         { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -44,9 +48,11 @@
             filename: decode(filename || ''), arrangement: null, runId: null, ticketPending: false,
             started: false, hits: 0, misses: 0, streak: 0, bestStreak: 0,
             practice: null,  // reason string once the run stops counting
+            mode: getMode(),
         };
     }
     function practice(reason) { if (run && run.started && !run.practice) run.practice = reason; }
+    rb.voidRun = (reason) => practice(reason || 'The run was interrupted');
     function songInfo() { return (window.highway && window.highway.getSongInfo && window.highway.getSongInfo()) || {}; }
 
     async function requestTicket() {
@@ -72,7 +78,9 @@
         if (!run) return;
         if (!run.started) {
             run.started = true;
-            requestTicket();
+            run.mode = getMode();
+            if (run.mode === 'practice') run.practice = PRACTICE_MODE;
+            else requestTicket();
         }
     });
     sm.on('song:seek', (e) => {
@@ -98,6 +106,10 @@
         if (run.streak > run.bestStreak) run.bestStreak = run.streak;
     });
     sm.on('note:miss', () => { if (run) { run.misses++; run.streak = 0; } });
+    sm.on('riffboard:mode', (e) => {
+        const m = e && e.detail && e.detail.mode;
+        if (run && run.started && m === 'practice') practice('You switched to practice mode');
+    });
     sm.on('song:ended', () => {
         if (!run || !run.started) return;
         const finished = run;
@@ -166,9 +178,13 @@
             '<div class="bg-fb-bg/60 rounded-lg p-3"><div class="text-2xl font-bold">' + pct(acc) + '</div><div class="text-xs text-fb-textDim">accuracy</div></div>' +
             '<div class="bg-fb-bg/60 rounded-lg p-3"><div class="text-2xl font-bold">' + r.bestStreak + '</div><div class="text-xs text-fb-textDim">best streak</div></div></div>';
         if (reason) {
-            modal(head + '<p class="mt-4 text-sm text-fb-textDim">This run doesn\'t count for the leaderboard: ' + esc(reason) +
-                '. Play the whole song through at full speed and difficulty to post a score.</p>' +
-                '<div class="mt-6 flex justify-end"><button data-close class="px-4 py-2 rounded-md bg-fb-primary hover:bg-fb-primaryHi text-white">Close</button></div>');
+            const why = reason === PRACTICE_MODE
+                ? 'Practice runs aren\'t ranked. When you\'re ready, play it for score: the whole song, start to finish.'
+                : 'This run doesn\'t count for the leaderboard: ' + esc(reason) + '. Score runs are played straight through at full speed.';
+            const m = modal(head + '<p class="mt-4 text-sm text-fb-textDim">' + why + '</p>' +
+                '<div class="mt-6 flex flex-col sm:flex-row sm:justify-end gap-2"><button data-close class="px-4 py-2 rounded-md border border-fb-border hover:bg-fb-bg">Close</button>' +
+                (rb.restartForScore ? '<button data-score class="px-4 py-2 rounded-md bg-fb-primary hover:bg-fb-primaryHi text-white font-medium">Play for score</button>' : '') + '</div>');
+            m.querySelector('[data-score]')?.addEventListener('click', () => { closeModal(); rb.restartForScore(); });
             return;
         }
         const m = modal(head +
@@ -220,12 +236,14 @@
             '<p class="text-sm text-fb-textDim truncate">' + esc((meta && meta.artist) || '') + (arrName ? ' · ' + esc(arrName) : '') + '</p></div></div>' +
             '<div class="mt-4">' + boardTable(board && board.scores) + '</div>' +
             '<div class="mt-6 flex justify-end gap-2"><button data-close class="px-4 py-2 rounded-md border border-fb-border hover:bg-fb-bg">Close</button>' +
-            '<button data-play class="px-4 py-2 rounded-md bg-fb-primary hover:bg-fb-primaryHi text-white font-medium">Play this part</button></div>');
+            '<button data-play class="px-4 py-2 rounded-md bg-fb-primary hover:bg-fb-primaryHi text-white font-medium">Play for score</button></div>');
         m.querySelector('[data-play]').addEventListener('click', () => {
             closeModal();
-            window.playSong && window.playSong(enc(filename), arrangement);
+            if (rb.play) rb.play(enc(filename), arrangement, 'score');
+            else if (window.playSong) window.playSong(enc(filename), arrangement);
         });
     }
+    rb.openBoard = openBoard;
 
     // ── Leaderboards screen ──────────────────────────────────────────────────
     async function renderBoards() {
@@ -234,7 +252,7 @@
         const d = await jget('/api/leaderboards');
         const boards = (d && d.boards) || [];
         root.innerHTML = '<div class="max-w-5xl mx-auto px-4 md:px-8 pb-12">' +
-            '<p class="text-fb-textDim mb-6">Every song part has its own board. Only full runs at normal speed count, and each name keeps its best score.</p>' +
+            '<p class="text-fb-textDim mb-6">Every song part has its own board. Only score runs count (the whole song, straight through), and each name keeps its best score.</p>' +
             (boards.length
                 ? '<div class="grid sm:grid-cols-2 gap-4">' + boards.map((b) =>
                     '<button data-board="' + esc(b.filename) + '" data-arr="' + b.arrangement + '" class="flex items-center gap-4 p-4 text-left bg-fb-card/80 hover:bg-fb-card rounded-lg border border-fb-border/50">' +
@@ -274,7 +292,7 @@
         root.innerHTML = '<div class="max-w-3xl mx-auto px-4 md:px-8 pb-12 space-y-4 fb-selectable">' + siteCard +
             card(site.name ? 'How it works' : 'What is RiffBoard?', '<p>' + siteName + ' place to play along to original songs by independent artists. Every song is charted by hand for guitar and bass. Plug in (or play near your microphone) and the notes you hit are scored as you play.</p>') +
             card('How scoring works', '<p>Note detection runs entirely in your browser: your audio never leaves your device. When a song ends, only the totals (notes hit, notes missed, best streak) are sent if you choose to post a score.</p>' +
-                '<p>A run counts for the leaderboard when you play the whole song at normal speed and full difficulty, without skipping, rewinding or looping. Practise however you like; those runs just stay off the board.</p>') +
+                '<p>Each time you start a song you pick a mode. <b>Play for score</b> runs the whole song start to finish at full speed, with no pausing or skipping, and the result can go on the leaderboard. <b>Practice</b> lets you pause, rewind, jump to any section, loop and slow down; practice runs stay off the board.</p>') +
             card('Privacy', '<p>There are no accounts. Your settings, favourites and practice history are stored in this browser only. Posting a score stores the name you type, your score and the time. To limit abuse, the server also keeps a salted, one-way hash of your IP address with each score; it is never shown or shared.</p>') +
             card('Open source', '<p>RiffBoard is free software under the GNU AGPL v3.0. It is built on <a class="text-fb-primary hover:text-fb-primaryHi underline" href="https://github.com/got-feedback/feedBack" target="_blank" rel="noopener">fee[dB]ack</a> and its note-detection plugin, by their contributors.</p>' +
                 '<p><a class="text-fb-primary hover:text-fb-primaryHi underline" href="' + esc(src) + '" target="_blank" rel="noopener">Source code</a>' +

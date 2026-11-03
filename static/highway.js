@@ -334,6 +334,16 @@ function createHighway() {
     hwState._lastFramePerf = 0;
     hwState._lastAutoAdjustAt = 0;
     hwState._lastUpscaleAt = 0;          // separate, longer clock for UPscaling (lazy)
+    // RiffBoard: GPU-bound signal. _drawMsEMA only measures the JS side of a
+    // frame; on phones the GPU is usually the bottleneck and the JS cost stays
+    // low while frames arrive late. Track the real frame interval during
+    // playback against the best interval seen this song (≈ display refresh).
+    hwState._gpuFrameEMA = 0;
+    hwState._gpuFrameBest = Infinity;
+    hwState._gpuLastAt = 0;
+    hwState._gpuLastDownEMA = 0;         // frame EMA when we last downscaled for the GPU
+    hwState._gpuStalls = 0;              // GPU downscales that didn't help
+    hwState._gpuHoldUntil = 0;           // no upscaling before this (after a GPU downscale)
     hwState._perfHud = null;
     hwState._hudOn = false;       // cached highwayPerfHud flag (re-read ~2x/sec, not per-frame)
     hwState._hudFlagAt = 0;
@@ -1117,6 +1127,14 @@ function createHighway() {
     function _adaptRenderScale(drawMs) {
         hwState._drawMsEMA = hwState._drawMsEMA === 0 ? drawMs : hwState._drawMsEMA * 0.9 + drawMs * 0.1;
         const nowP = performance.now();
+        // Frame interval between consecutive playback frames. Gaps over 100 ms
+        // (tab switch, pause, a seek) are not representative; skip them.
+        const fi = hwState._gpuLastAt ? nowP - hwState._gpuLastAt : 0;
+        hwState._gpuLastAt = nowP;
+        if (fi > 0 && fi < 100) {
+            hwState._gpuFrameEMA = hwState._gpuFrameEMA === 0 ? fi : hwState._gpuFrameEMA * 0.93 + fi * 0.07;
+            if (hwState._gpuFrameEMA < hwState._gpuFrameBest) hwState._gpuFrameBest = hwState._gpuFrameEMA;
+        }
         if (nowP - hwState._lastAutoAdjustAt < _AUTO_ADJUST_COOLDOWN_MS) return;
         // Commit to one evaluation per cooldown regardless of outcome —
         // otherwise, once the cooldown elapses, the deadband branch below
@@ -1124,12 +1142,31 @@ function createHighway() {
         hwState._lastAutoAdjustAt = nowP;
         const eff = _effectiveRenderScale();
         let next = hwState._autoScale;
-        if (hwState._drawMsEMA > _DRAW_BUDGET_HI_MS && eff > hwState._autoScaleMin) {
+        // GPU-bound: frames arrive well behind the display's refresh (assume at
+        // least 60 Hz) while the JS side is cheap. Resolution is the lever the
+        // GPU feels, but don't chase a frame cap we can't beat (iOS Low Power
+        // Mode pins rAF at 30 fps): stop after two downscales that didn't
+        // speed frames up, and never go below 0.6 for this reason alone.
+        const gpuBase = Math.min(hwState._gpuFrameBest, 1000 / 60);
+        const gpuEMA = hwState._gpuFrameEMA;
+        const gpuSlow = gpuEMA > 0 && Number.isFinite(gpuBase) && gpuEMA > gpuBase * 1.35
+            && hwState._gpuStalls < 2 && eff > Math.max(0.6, hwState._autoScaleMin);
+        const gpuFine = !(gpuEMA > 0) || gpuEMA < gpuBase * 1.12;
+        if (gpuSlow && hwState._drawMsEMA <= _DRAW_BUDGET_HI_MS) {
+            if (hwState._gpuLastDownEMA > 0 && gpuEMA > hwState._gpuLastDownEMA * 0.95) hwState._gpuStalls++;
+            else hwState._gpuStalls = 0;
+            hwState._gpuLastDownEMA = gpuEMA;
+            // A GPU-bound frame rate recovers as soon as we drop resolution, so
+            // the "fine again" signal would immediately invite an upscale. Hold.
+            hwState._gpuHoldUntil = nowP + 20000;
+            next = hwState._autoScale * 0.85;
+            hwState._lastUpscaleAt = nowP;
+        } else if (hwState._drawMsEMA > _DRAW_BUDGET_HI_MS && eff > hwState._autoScaleMin) {
             // Over budget — downscale promptly to protect the frame rate, and reset
             // the upscale clock so we don't immediately bounce back up.
             next = hwState._autoScale * 0.85;
             hwState._lastUpscaleAt = nowP;
-        } else if (hwState._drawMsEMA < _DRAW_BUDGET_LO_MS && eff < 1
+        } else if (hwState._drawMsEMA < _DRAW_BUDGET_LO_MS && eff < 1 && gpuFine && nowP >= hwState._gpuHoldUntil
                    && nowP - hwState._lastUpscaleAt >= _AUTO_UPSCALE_COOLDOWN_MS) {
             // Headroom — upscale LAZILY: a smaller step on a longer cooldown, and
             // only when the projected cost AFTER the step (cost scales ~with the
@@ -1781,6 +1818,8 @@ function createHighway() {
                 renderScale: hwState._renderScale,   // the user's Quality setting
                 autoScale: hwState._autoScale,       // what the load-adaptive loop chose
                 effectiveScale: _effectiveRenderScale(),
+                gpuFrameMs: hwState._gpuFrameEMA,    // RiffBoard: playback frame interval
+                gpuFrameBestMs: hwState._gpuFrameBest,
                 drawBudgetHiMs: _DRAW_BUDGET_HI_MS,
                 drawBudgetLoMs: _DRAW_BUDGET_LO_MS,
             };
@@ -2880,6 +2919,12 @@ function createHighway() {
             hwState._lastPausedDrawAt = 0;
             hwState._frameMsEMA = 0;
             hwState._lastFramePerf = 0;
+            hwState._gpuFrameEMA = 0;
+            hwState._gpuFrameBest = Infinity;
+            hwState._gpuLastAt = 0;
+            hwState._gpuLastDownEMA = 0;
+            hwState._gpuStalls = 0;
+            hwState._gpuHoldUntil = 0;
             hwState._hudOn = false;
             hwState._hudFlagAt = 0;
             if (hwState.ws) { hwState.ws.close(); hwState.ws = null; }

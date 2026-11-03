@@ -190,7 +190,7 @@
         <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
             <div class="flex items-end gap-1.5">
                 <a href="#" onclick="showScreen('home');return false" class="text-xl font-bold bg-gradient-to-r from-accent-light to-purple-400 bg-clip-text text-transparent">
-                    FeedBack
+                    RiffBoard
                 </a>
                 <span id="app-version" class="text-xs text-gray-600 mb-0.5"></span>
             </div>
@@ -1034,8 +1034,9 @@
     <!-- /#v3-main -->
 
     <script type="module" src="/static/highway.js"></script>
-    <script defer src="/static/vendor/lottie.min.js"></script>
-    <script defer src="/static/lottie-api.js"></script>
+    <!-- RiffBoard: lottie.min.js + lottie-api.js (window.feedBackLottie) are not
+         loaded: no bundled plugin uses them and they cost ~300 KB of parse on
+         every visit. -->
     <script type="module" src="/static/app.js"></script>
     <script defer src="/static/audio-mixer.js"></script>
     <script defer src="/static/vendor/shepherd.min.js"></script>
@@ -1061,6 +1062,7 @@
     <script defer src="/static/v3/interface-size-nudge.js"></script>
     <script defer src="/static/v3/player-chrome.js"></script>
     <!-- RiffBoard: leaderboards screen, end-of-run name entry, about page. -->
+    <script defer src="/static/riffboard/modes.js"></script>
     <script defer src="/static/riffboard/leaderboard.js"></script>
     <!-- Detachable panes. The manager first; then the hosts, which register
          themselves with it; then the chip and the launcher, which drive it.

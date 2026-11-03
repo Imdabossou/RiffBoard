@@ -2398,6 +2398,28 @@
     }
 
     const BG_DEFAULTS = { style: 'particles', intensity: 0.5, reactive: true, palette: 'default', bgTheme: 'default', hwTheme: 'default', showFretOnNote: true, fretNumberGhostScope: 'chords', cameraSmoothing: 0.5, zoomSmoothing: 0.5, tiltSmoothing: 0.5, cameraLockLow: false, cameraLockZoom: 0.5, cameraMode: 'lookahead', nutHeadstockVisible: true, tuningLabelsVisible: true, nutColor: '#f5f3f0', headstockColor: '#d4b48a', textSize: 0.5, vibrancy: 0.85, glow: 0.25, customImageDataUrl: '', customImageName: '', customVideoName: '', chordDiagramVisible: true, chordDiagramSize: 0.5, chordDiagramPosition: 'tl', fretColumnMarkerCadence: 1, projectionVisible: true, inlayLabelsVisible: false, sectionLabelsOnHighway: false, sectionHudVisible: false, sectionHudPosition: 'tr', sectionHudSize: 0.5, toneHudVisible: false, toneHudPosition: 'tl', toneHudSize: 0.5, fpsVisible: false, fretDividersVisible: true, slideArrowApproachVisible: true, slideArrowNeckVisible: true, slideArrowChainPreviewVisible: true, hitFx: 0.7, sparks: true, cinematic: true, verdictMarks: true, timingFx: true, streakFx: true, bloom: true };
+    // RiffBoard: a lighter default profile for phones, tablets and low-end
+    // machines. Bloom (several full-screen HDR passes), the animated
+    // background and the spark particles are what make mobile GPUs stutter, so
+    // they start OFF there. Only the DEFAULTS change: anything the visitor has
+    // set explicitly still wins. localStorage 'h3d_lite' = '1' / '0' forces it.
+    const _H3D_LITE = (function () {
+        try {
+            const forced = localStorage.getItem('h3d_lite');
+            if (forced === '1') return true;
+            if (forced === '0') return false;
+        } catch (_) { /* storage blocked */ }
+        try {
+            const mm = (q) => !!(window.matchMedia && window.matchMedia(q).matches);
+            if (mm('(pointer: coarse)') && !mm('(any-pointer: fine)')) return true;
+            if (navigator.deviceMemory && navigator.deviceMemory <= 4) return true;
+            if (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) return true;
+        } catch (_) { /* */ }
+        return false;
+    })();
+    const H3D_LITE_DEFAULTS = { style: 'off', bloom: false, sparks: false };
+    if (_H3D_LITE) Object.assign(BG_DEFAULTS, H3D_LITE_DEFAULTS);
+    try { window.h3dLite = { active: _H3D_LITE, defaults: _H3D_LITE ? H3D_LITE_DEFAULTS : {} }; } catch (_) { /* */ }
     // User-selectable, persistable bg styles — must mirror settings.html's
     // VALID_STYLES. 'venue' is deliberately NOT here: it is an internal effective
     // style reached only via _venueSceneOverride (the viz-picker Venue flow), so
@@ -9593,16 +9615,10 @@
             });
             const dotZBack = -STR_THICK * 0.85;
             const my = (sY(0) + sY(nStr - 1)) / 2;
-            const addDot = (x, y) => {
-                const d = new T.Mesh(dg, dm);
-                d.position.set(x, y, dotZBack);
-                // Above the dynamic lane (1) and its dividers (2) so the
-                // translucent blue lane no longer paints over and hides the
-                // inlay; still well below strings / wires / notes,
-                // so those keep drawing on top of the inlay.
-                d.renderOrder = 3;
-                fretG.add(d);
-            };
+            // RiffBoard: all dots share one geometry + material and never move,
+            // so draw them as ONE InstancedMesh (one draw call instead of ~12).
+            const dotPos = [];
+            const addDot = (x, y) => { dotPos.push(x, y); };
             for (const f of DOTS) {
                 const cx = xFretMid(f);
                 if (DDOTS.has(f)) {
@@ -9611,6 +9627,28 @@
                 } else {
                     addDot(cx, my);
                 }
+            }
+            if (dotPos.length) {
+                const n = dotPos.length / 2;
+                const dots = new T.InstancedMesh(dg, dm, n);
+                const _dm4 = new T.Matrix4();
+                for (let i = 0; i < n; i++) {
+                    _dm4.makeTranslation(dotPos[i * 2], dotPos[i * 2 + 1], dotZBack);
+                    dots.setMatrixAt(i, _dm4);
+                }
+                dots.instanceMatrix.needsUpdate = true;
+                // Instances span the board; the default bounding sphere is the
+                // single circle's, which would cull them all off-centre.
+                dots.computeBoundingSphere();
+                // Above the dynamic lane (1) and its dividers (2) so the
+                // translucent blue lane no longer paints over and hides the
+                // inlay; still well below strings / wires / notes,
+                // so those keep drawing on top of the inlay.
+                dots.renderOrder = 3;
+                fretG.add(dots);
+            } else {
+                dg.dispose();
+                dm.dispose();
             }
 
             // Fret inlay number labels — sprites sitting just behind the hit line
@@ -15784,7 +15822,9 @@
         function applySize(w, h) {
             if (!ren || !cam || !wrap) return;
             if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
-            const baseDPR = _ssActive() ? Math.min(devicePixelRatio, 1.25) : Math.min(devicePixelRatio, 2);
+            // RiffBoard: lite devices (phones) cap at 1.5x; phones report 2.6-3.5x,
+            // which multiplies the fill cost for little visible gain on a small screen.
+            const baseDPR = _ssActive() ? Math.min(devicePixelRatio, 1.25) : Math.min(devicePixelRatio, _H3D_LITE ? 1.5 : 2);
             ren.setPixelRatio(_renderScale * baseDPR);
             ren.setSize(w, h);
             // Pin the overlay to #highway's exact box so it fully covers the
