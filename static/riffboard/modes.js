@@ -346,6 +346,10 @@
     // ── Song map ─────────────────────────────────────────────────────────────
     let map = null, mapFill = null, mapHead = null, mapTip = null;
     let blocks = [], blockEls = [], activeIdx = -1, duration = 0, dragging = false;
+    let lastFrac = -1, lastNow = '', mapW = 0;
+    // Width cached via ResizeObserver: reading clientWidth every tick forced a
+    // synchronous layout while the highway was mid-frame.
+    function mapWidth() { return mapW || (map ? (mapW = map.clientWidth) : 0); }
 
     function songDuration() {
         const info = (window.highway && window.highway.getSongInfo && window.highway.getSongInfo()) || {};
@@ -376,6 +380,13 @@
         mapTip = map.querySelector('.rb-map-tip');
         p.insertBefore(map, p.firstChild);
         p.classList.add('rb-has-map');
+        if (typeof ResizeObserver === 'function') {
+            new ResizeObserver((es) => {
+                for (const e of es) mapW = e.contentRect.width;
+                lastFrac = -1;
+                tick();
+            }).observe(map);
+        }
         wireMap();
         applyModeClass();
         return map;
@@ -405,6 +416,7 @@
         });
         map.setAttribute('aria-valuemax', String(Math.round(duration)));
         activeIdx = -1;
+        lastFrac = -1;
         tick();
     }
 
@@ -413,10 +425,15 @@
         const t = nowT();
         const f = Math.max(0, Math.min(1, t / duration));
         if (!dragging) {
-            mapFill.style.transform = 'scaleX(' + f + ')';
-            mapHead.style.transform = 'translateX(' + (f * map.clientWidth) + 'px)';
+            const q = Math.round(f * 2000) / 2000;   // skip sub-pixel no-op writes
+            if (q !== lastFrac) {
+                lastFrac = q;
+                mapFill.style.transform = 'scaleX(' + q + ')';
+                mapHead.style.transform = 'translateX(' + (q * mapWidth()) + 'px)';
+            }
         }
-        map.setAttribute('aria-valuenow', String(Math.round(t)));
+        const now = String(Math.round(t));
+        if (now !== lastNow) { lastNow = now; map.setAttribute('aria-valuenow', now); }
         let idx = -1;
         for (let i = 0; i < blocks.length; i++) { if (blocks[i].start <= t) idx = i; else break; }
         if (idx !== activeIdx) {
@@ -458,7 +475,7 @@
             try { map.setPointerCapture(e.pointerId); } catch (_) { /* */ }
             const f = fracAt(e.clientX);
             mapFill.style.transform = 'scaleX(' + f + ')';
-            mapHead.style.transform = 'translateX(' + (f * map.clientWidth) + 'px)';
+            mapHead.style.transform = 'translateX(' + (f * mapWidth()) + 'px)';
             showTip(f);
             e.preventDefault();
         });
@@ -467,7 +484,7 @@
             const f = fracAt(e.clientX);
             if (dragging) {
                 mapFill.style.transform = 'scaleX(' + f + ')';
-                mapHead.style.transform = 'translateX(' + (f * map.clientWidth) + 'px)';
+                mapHead.style.transform = 'translateX(' + (f * mapWidth()) + 'px)';
             }
             if (e.pointerType === 'mouse' || dragging) showTip(f);
         });
@@ -494,5 +511,14 @@
         });
     }
 
+    // Lets CSS stop painting the chrome hidden under the full-screen player.
+    function syncPlaying() {
+        const p = $('player');
+        document.documentElement.classList.toggle('rb-playing', !!(p && p.classList.contains('active')));
+    }
+    sm.on('screen:changed', () => { syncPlaying(); setTimeout(syncPlaying, 0); });
+    sm.on('song:loading', () => setTimeout(syncPlaying, 0));
+
     applyModeClass();
+    syncPlaying();
 })();

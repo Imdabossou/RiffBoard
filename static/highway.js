@@ -344,6 +344,12 @@ function createHighway() {
     hwState._gpuLastDownEMA = 0;         // frame EMA when we last downscaled for the GPU
     hwState._gpuStalls = 0;              // GPU downscales that didn't help
     hwState._gpuHoldUntil = 0;           // no upscaling before this (after a GPU downscale)
+    // RiffBoard: same "did it help?" guard for the JS-cost path. Lowering the
+    // resolution can't make the renderer's JavaScript cheaper, so on a
+    // CPU-bound phone it only blurred the picture. Stop after two downscales
+    // that didn't bring the draw cost down.
+    hwState._cpuLastDownMs = 0;
+    hwState._cpuStalls = 0;
     hwState._perfHud = null;
     hwState._hudOn = false;       // cached highwayPerfHud flag (re-read ~2x/sec, not per-frame)
     hwState._hudFlagAt = 0;
@@ -1161,9 +1167,12 @@ function createHighway() {
             hwState._gpuHoldUntil = nowP + 20000;
             next = hwState._autoScale * 0.85;
             hwState._lastUpscaleAt = nowP;
-        } else if (hwState._drawMsEMA > _DRAW_BUDGET_HI_MS && eff > hwState._autoScaleMin) {
+        } else if (hwState._drawMsEMA > _DRAW_BUDGET_HI_MS && eff > hwState._autoScaleMin && hwState._cpuStalls < 2) {
             // Over budget — downscale promptly to protect the frame rate, and reset
             // the upscale clock so we don't immediately bounce back up.
+            if (hwState._cpuLastDownMs > 0 && hwState._drawMsEMA > hwState._cpuLastDownMs * 0.95) hwState._cpuStalls++;
+            else hwState._cpuStalls = 0;
+            hwState._cpuLastDownMs = hwState._drawMsEMA;
             next = hwState._autoScale * 0.85;
             hwState._lastUpscaleAt = nowP;
         } else if (hwState._drawMsEMA < _DRAW_BUDGET_LO_MS && eff < 1 && gpuFine && nowP >= hwState._gpuHoldUntil
@@ -2925,6 +2934,8 @@ function createHighway() {
             hwState._gpuLastDownEMA = 0;
             hwState._gpuStalls = 0;
             hwState._gpuHoldUntil = 0;
+            hwState._cpuLastDownMs = 0;
+            hwState._cpuStalls = 0;
             hwState._hudOn = false;
             hwState._hudFlagAt = 0;
             if (hwState.ws) { hwState.ws.close(); hwState.ws = null; }

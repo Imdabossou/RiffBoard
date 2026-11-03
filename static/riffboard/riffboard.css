@@ -338,3 +338,21 @@ body { background-color: rgb(var(--fb-sidebar)); color: rgb(var(--fb-text)); }
 .rb-song-map.rb-map-seekable:hover .rb-map-block { opacity: 0.7; }
 .rb-song-map.rb-map-seekable:hover .rb-map-block.rb-map-now { opacity: 1; }
 .rb-song-map:focus-visible { outline: 2px solid rgb(var(--fb-primary)); outline-offset: -2px; }
+
+/* ── Player performance ──────────────────────────────────────────────────────
+   The player is a fixed full-screen layer, but the topbar and sidebar under it
+   were still painted (the topbar with a backdrop blur). Hide them while a song
+   is open (html.rb-playing, set by modes.js); visibility keeps their layout so
+   leaving the player doesn't reflow. Backdrop blurs inside the player sit over
+   a canvas that changes every frame, so the GPU re-blurs them every frame:
+   swap them for slightly more opaque backgrounds. */
+html.rb-playing #v3-topbar,
+html.rb-playing #v3-sidebar {
+    visibility: hidden;
+}
+#player * {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+#player .v3-upnext { background: rgb(var(--fb-bg) / .86); }
+#player .v3-live-performance-hud { background: rgb(var(--fb-bg) / .88); }

@@ -263,8 +263,10 @@
     function revealChrome() {
         const p = player();
         if (!p) return;
-        p.classList.add('chrome-active');
-        p.classList.remove('chrome-idle');
+        if (!p.classList.contains('chrome-active') || p.classList.contains('chrome-idle')) {
+            p.classList.add('chrome-active');
+            p.classList.remove('chrome-idle');
+        }
         lastMove = now();
     }
     function tickIdle() {
@@ -276,7 +278,10 @@
         // matches(':hover') here forced a per-frame style recalc.
         // Keep the transport up while paused, hovering it, or a popover is open.
         if (openPop || overControls || !playing) { lastMove = now(); return; }
-        if (now() - lastMove > IDLE_MS) {
+        // RiffBoard: only touch the class list when it actually changes. This
+        // runs every frame, and even a no-op classList.add/remove re-sets the
+        // attribute, which re-styled the whole player subtree twice a frame.
+        if (now() - lastMove > IDLE_MS && !p.classList.contains('chrome-idle')) {
             p.classList.remove('chrome-active');
             p.classList.add('chrome-idle');
         }

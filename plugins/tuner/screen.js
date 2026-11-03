@@ -731,13 +731,10 @@
         if (window._tunerAudio) window._tunerAudio.stop();
         if (_state.vizContainer) _state.vizContainer.innerHTML = '';
         if (window.tuner?.updateButtons) window.tuner.updateButtons();
-        // Resume background audio so the live badge keeps updating after the panel closes.
-        if (window._tunerAudio && _tunerUIApi) {
-            window._tunerAudio.start(
-                { deviceId: _state.selectedDeviceId, channel: _state.selectedChannel, audioInputMode: _state.audioInputMode },
-                _tunerUIApi.updateUI
-            ).catch(e => console.warn('Tuner: badge audio resume failed:', e && e.message ? e.message : e));
-        }
+        // Resume background audio so the live badge keeps updating after the panel
+        // closes (RiffBoard: unless the player is open; see _badgeAudioSync).
+        _badgeRunning = false;
+        _badgeAudioSync();
         if (wasEnabled && onPlayer) {
             const songInfo = window.highway?.getSongInfo?.() || window.feedBack?.currentSong;
             if (songInfo) {
@@ -751,6 +748,47 @@
             }
         }
         _verifiedPublished = false;   // consumed — fresh for the next tuner session
+    }
+
+    // RiffBoard: the topbar badge's background pitch tracking (a second mic
+    // stream, AudioContext, main-thread ScriptProcessor and a 33 Hz YIN worker)
+    // is pointless while the player covers the topbar, and it competed with note
+    // detection for the phone's CPU. Run it only off the player, only when the
+    // tuner panel isn't driving the audio itself, and only once the visitor has
+    // already granted the microphone.
+    let _badgeRunning = false;
+    let _badgeSyncing = null;
+    async function _micGranted() {
+        try {
+            if (!navigator.permissions || !navigator.permissions.query) return false;
+            const st = await navigator.permissions.query({ name: 'microphone' });
+            return st && st.state === 'granted';
+        } catch (_) { return false; }
+    }
+    function _badgeAudioSync() {
+        if (_badgeSyncing) return _badgeSyncing.then(() => _badgeAudioSync());
+        const run = async () => {
+            if (!window._tunerAudio || !_tunerUIApi || _state.enabled) return;
+            const onPlayer = !!document.getElementById('player')?.classList.contains('active');
+            const want = !onPlayer && await _micGranted();
+            if (want === _badgeRunning || _state.enabled) return;
+            if (want) {
+                try {
+                    await window._tunerAudio.start(
+                        { deviceId: _state.selectedDeviceId, channel: _state.selectedChannel, audioInputMode: _state.audioInputMode },
+                        _tunerUIApi.updateUI
+                    );
+                    _badgeRunning = true;
+                } catch (e) {
+                    console.warn('Tuner: badge audio start failed (badge will be static):', e && e.message ? e.message : e);
+                }
+            } else {
+                window._tunerAudio.stop();
+                _badgeRunning = false;
+            }
+        };
+        _badgeSyncing = run().finally(() => { _badgeSyncing = null; });
+        return _badgeSyncing;
     }
 
     window.tuner = {
@@ -780,17 +818,11 @@
         await loadConfig();
         // Auto-start audio so the v3 badge receives live tuner:frame events from
         // page load, without requiring the user to open the tuner panel first.
-        // Errors are silent — a permission prompt or missing device is non-fatal
-        // here; the user will see the mic error modal if they explicitly open the
-        // tuner via enable().
-        try {
-            await window._tunerAudio.start(
-                { deviceId: _state.selectedDeviceId, channel: _state.selectedChannel, audioInputMode: _state.audioInputMode },
-                _tunerUIApi.updateUI
-            );
-        } catch (e) {
-            console.warn('Tuner: auto-start audio failed (badge will be static):', e && e.message ? e.message : e);
-        }
+        // RiffBoard: only when the visitor already granted the microphone (a
+        // public site must not prompt for it on page load), and never while the
+        // player is open (see _badgeAudioSync).
+        await _badgeAudioSync();
+        if (window.feedBack && window.feedBack.on) window.feedBack.on('screen:changed', () => { _badgeAudioSync(); });
         _installAutoOpenListeners();
     }).catch(e => console.error(e));
     _installAutoOpenListeners();

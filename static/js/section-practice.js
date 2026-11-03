@@ -556,6 +556,10 @@ function _sectionPracticePillHtml() {
         + '</button>';
 }
 
+// RiffBoard: set an attribute only when it changes. These run from a
+// per-frame draw hook, and every setAttribute is a style invalidation.
+function _setAttrIfChanged(el, k, v) { if (el.getAttribute(k) !== v) el.setAttribute(k, v); }
+
 function _syncSectionPracticePillV3Chrome(isV3) {
     const pill = document.getElementById('section-practice-pill');
     if (!pill) return;
@@ -568,12 +572,12 @@ function _syncSectionPracticePillV3Chrome(isV3) {
             ring.setAttribute('aria-hidden', 'true');
             pill.insertBefore(ring, pill.firstChild);
         }
-        pill.setAttribute('title', 'Practice');
-        pill.setAttribute('aria-label', 'Practice');
+        _setAttrIfChanged(pill, 'title', 'Practice');
+        _setAttrIfChanged(pill, 'aria-label', 'Practice');
     } else {
         if (ring) ring.remove();
-        pill.setAttribute('title', 'Section practice');
-        pill.setAttribute('aria-label', 'Section practice');
+        _setAttrIfChanged(pill, 'title', 'Section practice');
+        _setAttrIfChanged(pill, 'aria-label', 'Section practice');
     }
 }
 
@@ -862,24 +866,24 @@ function _syncSectionPracticePieceUi() {
     const total = _sectionPracticeRanges.length;
     const active = _sectionPracticeActiveParent >= 0;
     if (label) {
-        if (!active || !total) {
-            label.textContent = 'Part — of —';
-        } else {
-            const idx = _sectionPracticeCurrentPartIndex();
-            label.textContent = `Part ${idx + 1} of ${total}`;
-        }
+        const txt = (!active || !total)
+            ? 'Part — of —'
+            : `Part ${_sectionPracticeCurrentPartIndex() + 1} of ${total}`;
+        if (label.textContent !== txt) label.textContent = txt;
     }
-    if (wholeCb) {
+    if (wholeCb && wholeCb.checked !== _sectionPracticeWholeSection) {
         wholeCb.checked = _sectionPracticeWholeSection;
     }
     const partIdx = (!active || !total || _sectionPracticeWholeSection)
         ? 0
         : (_sectionPracticeSelected >= 0 ? _sectionPracticeSelected : 0);
     if (prev) {
-        prev.disabled = !active || !total || (!_sectionPracticeWholeSection && partIdx <= 0);
+        const d = !active || !total || (!_sectionPracticeWholeSection && partIdx <= 0);
+        if (prev.disabled !== d) prev.disabled = d;
     }
     if (next) {
-        next.disabled = !active || !total || (!_sectionPracticeWholeSection && partIdx >= total - 1);
+        const d = !active || !total || (!_sectionPracticeWholeSection && partIdx >= total - 1);
+        if (next.disabled !== d) next.disabled = d;
     }
 }
 

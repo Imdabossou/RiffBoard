@@ -335,6 +335,11 @@ function loadDetectionCore({ sandboxBeforeRun } = {}) {
         shareCardFilename: sandbox._ndShareCardFilename,
         autoSaveFilename: sandbox._ndAutoSaveFilename,
         createNoteDetector: sandbox.createNoteDetector,
+        // FFT internals (RiffBoard fast real FFT vs the reference complex FFT).
+        fftInPlace: sandbox._ndFftInPlace,
+        realFftMagnitude: sandbox._ndRealFftMagnitude,
+        hannWindow: sandbox._ndHannWindow,
+        fftMagnitude: sandbox._ndFftMagnitude,
         // Drill-mode tests: expose the slopsmith stub so tests can
         // drive synthetic `loop:restart` etc. and toggle the loop
         // state that getLoop() returns.

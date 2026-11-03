@@ -316,7 +316,7 @@ const _ND_AUTO_ENABLE_RETRY_MS = 1500;
 // exact build that produced it. The script tag has no `import`/`fetch`
 // hook to read package.json at load time, so this is the single
 // hand-maintained constant the diagnostic path keys off of.
-const _ND_VERSION = '1.32.1';
+const _ND_VERSION = '1.32.2';
 
 // Bleed-rescue tuning for the low-bass blind spot. A bass DI's fundamental is
 // weaker than its 2nd harmonic and an open string / neighbour often rings the
@@ -1666,29 +1666,100 @@ function _ndFftMagnitude(buffer, sampleRate) {
     const halfBins = (fftSize >> 1) + 1;
 
     if (_ndFftScratchSize !== fftSize) {
-        _ndFftInterleavedScratch = new Float32Array(2 * fftSize);
         _ndFftMagnitudesScratch = new Float32Array(halfBins);
         _ndFftScratchSize = fftSize;
     }
-    const interleaved = _ndFftInterleavedScratch;
     const magnitudes = _ndFftMagnitudesScratch;
-    // Zero the scratch — windowed buffer fills only the first 2*buffer.length
-    // slots, but the FFT reads the whole array.
-    interleaved.fill(0);
-
-    // Hann-window the real part, leave imag as zero. Windowing reduces
-    // spectral leakage from a finite-length buffer.
-    for (let i = 0; i < buffer.length; i++) {
-        const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / (buffer.length - 1)));
-        interleaved[2 * i] = buffer[i] * w;
-    }
-    _ndFftInPlace(interleaved, 1);
-    for (let k = 0; k < halfBins; k++) {
-        const re = interleaved[2 * k];
-        const im = interleaved[2 * k + 1];
-        magnitudes[k] = Math.sqrt(re * re + im * im);
-    }
+    _ndRealFftMagnitude(buffer, _ndHannWindow(buffer.length), fftSize, magnitudes);
     return { magnitudes, binHz: sampleRate / fftSize, fftSize };
+}
+
+// RiffBoard: fast real-input FFT for _ndFftMagnitude. The signal is real, so
+// it is packed as N/2 complex samples (even → re, odd → im), transformed with
+// an N/2-point FFT and split back into the N-point spectrum: half the
+// butterflies of the complex FFT above. Bit-reversal order and twiddles are
+// precomputed once per size (no per-call cos/sin), and the Hann window is
+// cached per buffer length. Same spectrum (to float rounding), ~4x faster —
+// this runs up to 24 times in one miss-check tick on a busy passage, which
+// was the biggest single cause of dropped frames on phones.
+const _ndRfftPlans = new Map();
+function _ndRfftPlan(n) {
+    let plan = _ndRfftPlans.get(n);
+    if (plan) return plan;
+    const m = n >> 1;
+    let bits = 0;
+    while ((1 << bits) < m) bits++;
+    const rev = new Uint32Array(m);
+    for (let i = 0; i < m; i++) {
+        let r = 0, x = i;
+        for (let b = 0; b < bits; b++) { r = (r << 1) | (x & 1); x >>= 1; }
+        rev[i] = r;
+    }
+    const half = Math.max(1, m >> 1);
+    const cos = new Float64Array(half), sin = new Float64Array(half);
+    for (let i = 0; i < half; i++) {
+        const a = -2 * Math.PI * i / m;
+        cos[i] = Math.cos(a); sin[i] = Math.sin(a);
+    }
+    const pc = new Float64Array(m + 1), ps = new Float64Array(m + 1);
+    for (let k = 0; k <= m; k++) {
+        const a = -2 * Math.PI * k / n;
+        pc[k] = Math.cos(a); ps[k] = Math.sin(a);
+    }
+    plan = { n, m, rev, cos, sin, pc, ps, re: new Float64Array(m), im: new Float64Array(m) };
+    _ndRfftPlans.set(n, plan);
+    return plan;
+}
+const _ndHannCache = new Map();
+function _ndHannWindow(len) {
+    let w = _ndHannCache.get(len);
+    if (!w) {
+        w = new Float64Array(len);
+        for (let i = 0; i < len; i++) w[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (len - 1)));
+        if (_ndHannCache.size > 16) _ndHannCache.clear();
+        _ndHannCache.set(len, w);
+    }
+    return w;
+}
+// |FFT_n(buffer · window, zero-padded to n)| for bins 0..n/2 into `out`.
+function _ndRealFftMagnitude(buffer, window, n, out) {
+    const p = _ndRfftPlan(n);
+    const { m, rev, cos, sin, pc, ps, re, im } = p;
+    const len = Math.min(buffer.length, n);
+    // Load z[j] = x[2j] + i·x[2j+1] in bit-reversed order.
+    for (let j = 0; j < m; j++) {
+        const e = 2 * j, o = e + 1;
+        const r = rev[j];
+        re[r] = e < len ? buffer[e] * window[e] : 0;
+        im[r] = o < len ? buffer[o] * window[o] : 0;
+    }
+    // Iterative radix-2 butterflies (forward, exp(-i·2π·k/m)).
+    for (let size = 2; size <= m; size <<= 1) {
+        const h = size >> 1, step = (m / size) | 0;
+        for (let i = 0; i < m; i += size) {
+            for (let k = 0, t = 0; k < h; k++, t += step) {
+                const a = i + k, b = a + h;
+                const wr = cos[t], wi = sin[t];
+                const xr = re[b] * wr - im[b] * wi;
+                const xi = re[b] * wi + im[b] * wr;
+                re[b] = re[a] - xr; im[b] = im[a] - xi;
+                re[a] += xr; im[a] += xi;
+            }
+        }
+    }
+    // Split: X[k] = E[k] + W_n^k · O[k], with
+    //   E[k] = (Z[k] + conj Z[m-k]) / 2,  O[k] = (Z[k] - conj Z[m-k]) / 2i.
+    for (let k = 0; k <= m; k++) {
+        const k1 = k === m ? 0 : k;
+        const k2 = k === 0 ? 0 : m - k;
+        const zr = re[k1], zi = im[k1], cr = re[k2], ci = im[k2];
+        const er = (zr + cr) * 0.5, ei = (zi - ci) * 0.5;
+        const or = (zi + ci) * 0.5, oi = (cr - zr) * 0.5;
+        const xr = er + pc[k] * or - ps[k] * oi;
+        const xi = ei + pc[k] * oi + ps[k] * or;
+        out[k] = Math.sqrt(xr * xr + xi * xi);
+    }
+    return out;
 }
 
 // Parabolic interpolation over a 3-sample peak — returns a sub-sample
@@ -3366,6 +3437,7 @@ function createNoteDetector(options = {}) {
     // additive — it only upgrades a miss to a hit — so one landing a frame late,
     // or not at all under a storm, is invisible to scoring.
     const _RESCUE_WINDOWS_PER_TICK = 24;
+    const _RESCUE_MS_PER_TICK = 6;
 
     // Tuning — per-instance so panels can be on different songs.
     // tuningOffsets is resized to match the actual string count on enable();
@@ -6624,6 +6696,12 @@ function createNoteDetector(options = {}) {
         // checkNote spends against this; once exhausted, further conceded bass
         // misses this tick retire as plain misses instead of running FFTs.
         let rescueWinBudget = _RESCUE_WINDOWS_PER_TICK;
+        // RiffBoard: also a TIME budget. 24 windows is ~5 ms on a desktop but
+        // 25+ ms on a phone, long enough to drop frames; stop spending once
+        // this tick has used ~6 ms. Rescue only ever upgrades a miss to a hit,
+        // so the cap degrades gracefully the same way the window cap does.
+        const rescueDeadline = (typeof performance !== 'undefined' ? performance.now() : 0) + _RESCUE_MS_PER_TICK;
+        const rescueTimeLeft = () => typeof performance === 'undefined' || performance.now() < rescueDeadline;
         const avOffsetSec = (hw.getAvOffset ? hw.getAvOffset() / 1000 : 0);
         const t = hw.getTime() + avOffsetSec - latencyOffset;
         const tolerance = timingTolerance;
@@ -6679,7 +6757,7 @@ function createNoteDetector(options = {}) {
                 // per-tick FFT budget is spent (batch retire) — the miss still
                 // retires, just without the additive rescue upgrade.
                 let rescued = null;
-                if (rescueWinBudget > 0) {
+                if (rescueWinBudget > 0 && rescueTimeLeft()) {
                     const winBefore = _rescueWindows;
                     rescued = _tryBassRescue(chartNote, noteTime, expectedMidi);
                     rescueWinBudget -= (_rescueWindows - winBefore);
@@ -6708,7 +6786,7 @@ function createNoteDetector(options = {}) {
                 // Behind the same per-tick budget as the rescue above; under a
                 // batch retire the miss simply lands with no attribution.
                 let an = { stringEnergy: null, muteFail: false, presenceComb: 0 };
-                if (rescueWinBudget > 0) {
+                if (rescueWinBudget > 0 && rescueTimeLeft()) {
                     an = _missAnalysisAtNote(chartNote, noteTime);
                     rescueWinBudget -= 1;
                 }
@@ -12140,6 +12218,11 @@ function createNoteDetector(options = {}) {
         removeHUD();
     }
 
+    // RiffBoard: write-on-change. updateHUD runs ~30x a second and most
+    // values (score, accuracy, counts) don't change between ticks; every
+    // textContent write is a DOM mutation + style/layout/paint pass.
+    function _ndSetText(el, v) { const s = String(v); if (el.textContent !== s) el.textContent = s; }
+    function _ndSetStyle(el, k, v) { if (el.style[k] !== v) el.style[k] = v; }
     function updateHUD() {
         if (!enabled) return;
 
@@ -12178,12 +12261,12 @@ function createNoteDetector(options = {}) {
             if (score < displayScore) displayScore = score;
             const diff = score - displayScore;
             displayScore = diff < 1 ? score : displayScore + diff * 0.25;
-            scoreEl.textContent = String(Math.round(displayScore));
+            _ndSetText(scoreEl, String(Math.round(displayScore)));
         }
 
         if (multEl && multiplier !== lastMultTier) {
             multEl.setAttribute('data-tier', String(multiplier));
-            multEl.textContent = '×' + multiplier;
+            _ndSetText(multEl, '×' + multiplier);
             if (multiplier > lastMultTier) {
                 // Remove + reflow + re-add so consecutive tier-ups retrigger
                 // the one-shot keyframe.
@@ -12197,16 +12280,16 @@ function createNoteDetector(options = {}) {
         if (accEl && total > 0) {
             const accuracy = Math.round((hits / total) * 100);
             const color = accuracy >= 90 ? '#00ff88' : accuracy >= 70 ? '#ffcc00' : '#ff4444';
-            accEl.textContent = accuracy + '%';
-            accEl.style.color = color;
+            _ndSetText(accEl, accuracy + '%');
+            _ndSetStyle(accEl, "color", color);
         } else if (accEl) {
-            accEl.textContent = '';
+            _ndSetText(accEl, '');
         }
 
         if (streakEl) {
             let text = streak > 0 ? `${streak} streak` : '';
             if (bestStreak > 0) text += `  best: ${bestStreak}`;
-            streakEl.textContent = text;
+            _ndSetText(streakEl, text);
             if (streak === 0 && lastStreakVal >= 10) {
                 // A multiplier-worthy streak just broke — shake the panel.
                 const hudEl = instanceRoot.querySelector('.nd-hud');
@@ -12224,12 +12307,12 @@ function createNoteDetector(options = {}) {
         }
 
         if (countsEl && total > 0) {
-            countsEl.textContent = `${hits} / ${total}`;
+            _ndSetText(countsEl, `${hits} / ${total}`);
         } else if (countsEl) {
             // Clear on zero-total so a reset/new-song enable doesn't
             // show the previous session's `X / Y` until the first
             // judgment lands. Mirrors the accuracy label's else-branch.
-            countsEl.textContent = '';
+            _ndSetText(countsEl, '');
         }
 
         if (detectedEl) {
@@ -12239,7 +12322,7 @@ function createNoteDetector(options = {}) {
                 // non-standard tuning, and capo all still route through the
                 // same MIDI-name formatter instead of string-index lookups.
                 const displayMidi = Number.isFinite(detectedDisplayMidi) ? detectedDisplayMidi : detectedMidi;
-                detectedEl.textContent = `${_ndMidiToName(displayMidi)} · s${detectedString} f${detectedFret}`;
+                _ndSetText(detectedEl, `${_ndMidiToName(displayMidi)} · s${detectedString} f${detectedFret}`);
             } else if (lastChordScore !== null) {
                 // No confident single-note detected this frame, but we
                 // have a recent chord score from the constraint path —
@@ -12251,12 +12334,12 @@ function createNoteDetector(options = {}) {
                 const CHORD_HUD_TTL_SEC = 1.5;
                 if (songTime - lastChordTime <= CHORD_HUD_TTL_SEC) {
                     const pct = Math.round(lastChordScore * 100);
-                    detectedEl.textContent = `chord ${lastChordHit}/${lastChordTotal} (${pct}%)`;
+                    _ndSetText(detectedEl, `chord ${lastChordHit}/${lastChordTotal} (${pct}%)`);
                 } else {
-                    detectedEl.textContent = '';
+                    _ndSetText(detectedEl, '');
                 }
             } else {
-                detectedEl.textContent = '';
+                _ndSetText(detectedEl, '');
             }
         }
 

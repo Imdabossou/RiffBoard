@@ -37,6 +37,29 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
   is the bottleneck (frames arriving late), which is the usual case on phones.
 - The container image ships brotli/gzip copies of the frontend; the server
   sends them to browsers that accept them (about 4 MB of JavaScript → under 1 MB).
+- A second performance pass, measured on a phone-sized screen with the CPU
+  slowed 8-12x and a fake microphone feeding note detection:
+  - 3D highway: lane strips, lane dividers, fret wires and beat lines are
+    batched (instancing / one line buffer per material), about a third fewer
+    draw calls; world matrices are updated only for visible objects (the
+    pools keep ~900 hidden meshes); overlay text is cached as bitmaps; the
+    overlay canvas is left alone (and hidden) while it has nothing on it;
+    hidden pool materials are compiled at load instead of mid-song.
+  - Note detection: a real-input FFT with precomputed tables (2.2x faster,
+    same spectrum), a time budget for the miss-rescue FFTs, and the HUD only
+    writes text that changed.
+  - The tuner badge no longer runs its own microphone stream and pitch
+    tracker while the player is open, and never asks for the microphone on
+    page load (only once permission was already granted).
+  - The page under the full-screen player is no longer restyled and
+    repainted every frame (idle-class churn, tuner badge meter, section
+    practice labels, topbar/sidebar painted under the player, backdrop
+    blurs over the moving canvas).
+  - The automatic resolution scaler stops lowering resolution when that
+    doesn't make frames cheaper (it was blurring the picture on CPU-bound
+    phones for no gain).
+  Result at a 12x slowdown without a microphone: 46 → 59.5 fps, frames
+  over 25 ms 524 → 18, and the resolution stays at 100% instead of 25%.
 
 ### Fixed
 - Leftover "Slopsmith"/"FeedBack" names in visible text, including the

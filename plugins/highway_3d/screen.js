@@ -952,6 +952,8 @@
     // Each strip’s <anchor> uses that chart time so the blue lane doesn’t
     // switch ~BEHIND seconds before the XML <anchor time="…"/>.
     const HWY_LANE_TIME_SLICES = 96;
+    // RiffBoard: instance capacity per lane/divider material (instPool).
+    const HWY_LANE_INST_CAP = (NFRETS + 3) * HWY_LANE_TIME_SLICES;
     /** Odd columns (1st/3rd/…) darker teal; even columns brighter blue. */
     const HWY_LANE_STRIPE_ODD_HEX  = 0x103B5C;
     const HWY_LANE_STRIPE_EVEN_HEX = 0x08283C;
@@ -4594,6 +4596,25 @@
         let _laneTargetColor = null;
         let _renderScale = 1;
         let lyricsCanvas = null, lyricsCtx = null;
+        // RiffBoard: overlay dirty tracking. The overlay was cleared every
+        // frame, and a cleared canvas is still a CHANGED canvas: the compositor
+        // re-uploads the whole full-screen layer. Wrap the context's drawing
+        // calls to note whether this frame painted anything; when last frame
+        // left it blank there's nothing to clear.
+        // While it stays blank it is also hidden, so the compositor skips the
+        // layer entirely; the first draw call shows it again.
+        let _ovlDrew = true, _ovlHidden = false;
+        function _ovlTrack(ctx) {
+            for (const k of ['fill', 'stroke', 'fillRect', 'strokeRect', 'fillText', 'strokeText', 'drawImage', 'putImageData']) {
+                const orig = ctx[k];
+                if (typeof orig !== 'function') continue;
+                ctx[k] = function () {
+                    _ovlDrew = true;
+                    if (_ovlHidden && lyricsCanvas) { lyricsCanvas.style.visibility = ''; _ovlHidden = false; }
+                    return orig.apply(this, arguments);
+                };
+            }
+        }
         // FPS counter overlay. EMA-smoothed over ~30 frames so the readout doesn't
         // jitter every rAF tick. Controlled by the 'fpsVisible' setting (BG_DEFAULTS).
         // Legacy 'h3d_showFps' localStorage key and window.h3dShowFps are no longer
@@ -5173,6 +5194,9 @@
         // Updated each frame to gold when inside the active anchor range,
         // gray otherwise. Reset to [] on every buildBoard() rebuild.
         let fretWireMats = [];
+        // RiffBoard: batched fret-wire drawing (see buildBoard / _fretWiresFlush).
+        let _fwIdleIM = null, _fwActiveIM = null, _fwSolo = [], _fwX = [], _fwY = 0, _fwSig = '';
+        let _fwMtx = null;
         // Shared bowed TubeGeometry for all fret wires (centered at x=0;
         // each fret mesh only differs by position). Disposed on rebuild +
         // teardown. See FRET_BOW_DZ constants.
@@ -6323,6 +6347,171 @@
             };
         }
 
+        // RiffBoard: instanced pool. For many identical meshes that differ only
+        // in transform (lane strips, lane dividers), one InstancedMesh per
+        // material replaces one draw call per piece: ~60 draw calls a frame on
+        // a busy passage became ≤5. Same reset() / add() rhythm as pool();
+        // flush() writes the counts once the frame's pieces are in.
+        function instPool(parent, geo, mats, renderOrder, cap, rotX) {
+            const slots = new Map();
+            for (const m of mats) {
+                const im = new T.InstancedMesh(geo, m, cap);
+                im.count = 0;
+                im.visible = false;
+                im.renderOrder = renderOrder;
+                // Instances span the whole board; the base geometry's bounds
+                // would cull them. They're cheap, so skip culling.
+                im.frustumCulled = false;
+                im.instanceMatrix.setUsage(T.DynamicDrawUsage);
+                parent.add(im);
+                slots.set(m, { im, n: 0 });
+            }
+            const q = new T.Quaternion();
+            if (rotX) q.setFromAxisAngle(new T.Vector3(1, 0, 0), rotX);
+            const pos = new T.Vector3(), scl = new T.Vector3(), mtx = new T.Matrix4();
+            return {
+                reset() { for (const s of slots.values()) s.n = 0; },
+                add(mat, x, y, z, sx, sy, sz) {
+                    const s = slots.get(mat);
+                    if (!s || s.n >= cap) return;
+                    pos.set(x, y, z); scl.set(sx, sy, sz);
+                    mtx.compose(pos, q, scl);
+                    s.im.setMatrixAt(s.n++, mtx);
+                },
+                flush() {
+                    for (const s of slots.values()) {
+                        const im = s.im;
+                        im.count = s.n;
+                        im.visible = s.n > 0;
+                        if (s.n > 0) {
+                            const attr = im.instanceMatrix;
+                            attr.clearUpdateRanges();
+                            attr.addUpdateRange(0, s.n * 16);
+                            attr.needsUpdate = true;
+                        }
+                    }
+                },
+                warm() { return this; },
+            };
+        }
+
+        // RiffBoard: draw the fret wires from their per-wire state (written by
+        // update()). Wires exactly in the idle or gold tier go into the two
+        // instanced meshes; anything else (a wire mid hit-flash) gets one of
+        // the solo meshes with its own material. Matrices are only rewritten
+        // when tier membership changes.
+        // RiffBoard: line batch. Many independent straight lines sharing a
+        // material (beat lines) become one LineSegments per material with a
+        // dynamic vertex buffer: one draw call instead of one per line.
+        function lineBatch(parent, mats, cap) {
+            const slots = new Map();
+            for (const m of mats) {
+                const pos = new Float32Array(cap * 6);
+                const geo = new T.BufferGeometry();
+                const attr = new T.BufferAttribute(pos, 3);
+                attr.setUsage(T.DynamicDrawUsage);
+                geo.setAttribute('position', attr);
+                geo.setDrawRange(0, 0);
+                const ls = new T.LineSegments(geo, m);
+                ls.frustumCulled = false;
+                ls.visible = false;
+                parent.add(ls);
+                _ownedSharedGeos.push(geo);
+                slots.set(m, { ls, pos, attr, geo, n: 0 });
+            }
+            return {
+                reset() { for (const s of slots.values()) s.n = 0; },
+                add(mat, x0, y0, z0, x1, y1, z1) {
+                    const s = slots.get(mat);
+                    if (!s || s.n >= cap) return;
+                    const o = s.n++ * 6, a = s.pos;
+                    a[o] = x0; a[o + 1] = y0; a[o + 2] = z0;
+                    a[o + 3] = x1; a[o + 4] = y1; a[o + 5] = z1;
+                },
+                flush() {
+                    for (const s of slots.values()) {
+                        s.geo.setDrawRange(0, s.n * 2);
+                        s.ls.visible = s.n > 0;
+                        if (s.n > 0) {
+                            s.attr.clearUpdateRanges();
+                            s.attr.addUpdateRange(0, s.n * 6);
+                            s.attr.needsUpdate = true;
+                        }
+                    }
+                },
+                warm() { return this; },
+            };
+        }
+
+        function _fretWiresFlush() {
+            if (!_fwIdleIM || !fretWireMats.length) return;
+            if (!_fwMtx) _fwMtx = new T.Matrix4();
+            let sig = '';
+            let nIdle = 0, nAct = 0, nSolo = 0;
+            const idle = [], act = [];
+            for (let f = 0; f < fretWireMats.length; f++) {
+                const st = fretWireMats[f];
+                if (!st) continue;
+                const plain = st.emissiveIntensity === 1 && st.emissive.getHex() === FRET_EMISSIVE;
+                const hex = st.color.getHex();
+                if (plain && hex === FRET_WIRE_IDLE_HEX && st.opacity === FRET_WIRE_IDLE_OP) {
+                    idle.push(f); sig += 'i';
+                } else if (plain && hex === FRET_WIRE_ACTIVE_HEX && st.opacity === FRET_WIRE_ACTIVE_OP) {
+                    act.push(f); sig += 'a';
+                } else if (nSolo < _fwSolo.length) {
+                    const m = _fwSolo[nSolo++];
+                    m.visible = true;
+                    m.position.set(_fwX[f], _fwY, 0);
+                    m.material.color.copy(st.color);
+                    m.material.opacity = st.opacity;
+                    m.material.emissive.copy(st.emissive);
+                    m.material.emissiveIntensity = st.emissiveIntensity;
+                    sig += 's';
+                } else {
+                    act.push(f); sig += 'A';   // out of solo slots: closest tier
+                }
+            }
+            for (let i = nSolo; i < _fwSolo.length; i++) _fwSolo[i].visible = false;
+            if (sig === _fwSig) return;
+            _fwSig = sig;
+            const fill = (im, list) => {
+                for (let i = 0; i < list.length; i++) {
+                    _fwMtx.makeTranslation(_fwX[list[i]], _fwY, 0);
+                    im.setMatrixAt(i, _fwMtx);
+                }
+                im.count = list.length;
+                im.visible = list.length > 0;
+                im.instanceMatrix.needsUpdate = true;
+            };
+            fill(_fwIdleIM, idle);
+            fill(_fwActiveIM, act);
+            nIdle = idle.length; nAct = act.length;
+            return nIdle + nAct;
+        }
+
+        function _updateVisibleMatrices(root) {
+            if (!root) return;
+            root.matrixWorldAutoUpdate = false;   // three.js: don't redo the whole tree in render()
+            if (root.matrixAutoUpdate) root.updateMatrix();
+            if (root.parent) root.matrixWorld.multiplyMatrices(root.parent.matrixWorld, root.matrix);
+            else root.matrixWorld.copy(root.matrix);
+            root.matrixWorldNeedsUpdate = false;
+            _updVisChildren(root);
+        }
+        function _updVisChildren(o) {
+            const ch = o.children;
+            for (let i = 0, n = ch.length; i < n; i++) {
+                const c = ch[i];
+                if (!c.visible) continue;
+                if (c.matrixAutoUpdate) c.updateMatrix();
+                if (c.matrixWorldAutoUpdate !== false) {
+                    c.matrixWorld.multiplyMatrices(o.matrixWorld, c.matrix);
+                    c.matrixWorldNeedsUpdate = false;
+                }
+                if (c.children.length) _updVisChildren(c);
+            }
+        }
+
         // Returns indices of the longest consecutive run in a sorted integer
         // array as { start, len } — `sorted[start..start+len)` is the run.
         // Avoids the two per-call sub-array allocations of the previous
@@ -7323,6 +7512,7 @@
             lyricsCanvas = document.createElement('canvas');
             lyricsCanvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:1;';
             lyricsCtx = lyricsCanvas.getContext('2d');
+            _ovlTrack(lyricsCtx);
             wrap.appendChild(lyricsCanvas);
 
             scene = new T.Scene();
@@ -7701,7 +7891,7 @@
             });
             pTapChevron = pool(noteG, () => new T.Mesh(gTapChevron, mTapChevron));
             pLbl  = pool(lblG,  () => new T.Sprite(txtMat('0', '#fff', false, 'technique')));
-            pBeat = pool(beatG, () => new T.Line(gBeat, mBeatQ));
+            pBeat = lineBatch(beatG, [mBeatM, mBeatQ], 512);
             pSec  = pool(lblG,  () => new T.Sprite(txtMat('', '#0dd', true, 'section')));
 
             // Chord sustain length indicator — thin horizontal plane rails.
@@ -7846,7 +8036,7 @@
             // not be reachable via scene.traverse() if no lane was ever rendered.
             _ownedSharedMats.push(mLaneOdd, mLaneEven);
             _ownedSharedGeos.push(gLanePlane);
-            pLane = pool(noteG, () => new T.Mesh(gLanePlane, mLaneOdd));
+            pLane = instPool(noteG, gLanePlane, [mLaneOdd, mLaneEven], 1, HWY_LANE_INST_CAP, -Math.PI / 2);
 
             gGhostFretPlane = new T.PlaneGeometry(1, 1);
             _ownedSharedGeos.push(gGhostFretPlane);
@@ -7877,7 +8067,8 @@
                 color: 0x364D5F, transparent: true, opacity: 0.4, fog: false, depthWrite: false,
             });
             _ownedSharedMats.push(mLaneDivider, mLaneDividerArp, mLaneDividerExt);
-            pLaneDivider = pool(noteG, () => new T.Mesh(gLaneDivider, mLaneDivider));
+            _ownedSharedGeos.push(gLaneDivider);
+            pLaneDivider = instPool(noteG, gLaneDivider, [mLaneDivider, mLaneDividerArp, mLaneDividerExt], 2, HWY_LANE_INST_CAP, 0);
 
             // Chord frame palette (frame alpha 128, fill gradient alpha 32; MeshBasic).
             const chR = CHORD_BOX_TEAL_HEX >> 16 & 255;
@@ -9341,6 +9532,8 @@
                     // per-mesh here would fire one redundant dispose event per
                     // fret. Skip it; it's disposed exactly once below.
                     if (o.geometry !== fretTubeGeo) o.geometry?.dispose?.();
+                    // Frees the per-instance matrix buffer (dots, batched wires).
+                    if (o.isInstancedMesh) o.dispose();
                     const mat = o.material;
                     if (mat) {
                         const mats = Array.isArray(mat) ? mat : [mat];
@@ -9356,6 +9549,7 @@
             // tracking array. The shared fretTubeGeo was skipped by that
             // traverse, so dispose it exactly once here.
             fretWireMats = [];
+            _fwIdleIM = _fwActiveIM = null; _fwSolo = []; _fwSig = '';
             fretTubeGeo?.dispose?.();
             fretTubeGeo = null;
 
@@ -9583,21 +9777,50 @@
             fretTubeGeo = new T.TubeGeometry(
                 tubeCurve, FRET_TUBE_SEG, FRET_TUBE_RADIUS, FRET_TUBE_RADIAL, false,
             );
+            // RiffBoard: the wires are drawn batched. fretWireMats[f] is now a
+            // plain per-wire STATE object with the same fields update() writes
+            // (color / opacity / emissive / emissiveIntensity); _fretWiresFlush()
+            // draws every wire still in the idle tier as ONE instanced mesh,
+            // every wire in the gold anchor tier as another, and gives the few
+            // wires mid hit-flash their own mesh and material. 25 draw calls → 2-4.
+            const mkWireMat = (hex, op) => new T.MeshStandardMaterial({
+                color: hex, metalness: FRET_METALNESS, roughness: FRET_ROUGHNESS,
+                emissive: FRET_EMISSIVE,
+                // depthWrite:false (matches other transparent overlays here):
+                // a transparent fret must not write depth or it can occlude
+                // later-drawn transparent elements despite depthTest:false.
+                transparent: true, opacity: op, depthTest: false, depthWrite: false,
+            });
+            const wireRO = renderOrderForLayerAtZ(0, 'BOARD_FRET_WIRE');
+            const mkWireIM = (mat) => {
+                const im = new T.InstancedMesh(fretTubeGeo, mat, NFRETS + 1);
+                im.count = 0;
+                im.renderOrder = wireRO;
+                im.frustumCulled = false;
+                fretG.add(im);
+                return im;
+            };
+            _fwIdleIM = mkWireIM(mkWireMat(FRET_WIRE_IDLE_HEX, FRET_WIRE_IDLE_OP));
+            _fwActiveIM = mkWireIM(mkWireMat(FRET_WIRE_ACTIVE_HEX, FRET_WIRE_ACTIVE_OP));
+            _fwSolo = [];
+            for (let i = 0; i < 4; i++) {
+                const m = new T.Mesh(fretTubeGeo, mkWireMat(FRET_WIRE_IDLE_HEX, FRET_WIRE_IDLE_OP));
+                m.renderOrder = wireRO;
+                m.visible = false;
+                fretG.add(m);
+                _fwSolo.push(m);
+            }
+            _fwX = [];
+            _fwY = wireMidY;
+            _fwSig = '';
             for (let f = 0; f <= NFRETS; f++) {
-                const x = xFret(f);
-                const mat = new T.MeshStandardMaterial({
-                    color: FRET_WIRE_IDLE_HEX, metalness: FRET_METALNESS, roughness: FRET_ROUGHNESS,
-                    emissive: FRET_EMISSIVE,
-                    // depthWrite:false (matches other transparent overlays here):
-                    // a transparent fret must not write depth or it can occlude
-                    // later-drawn transparent elements despite depthTest:false.
-                    transparent: true, opacity: FRET_WIRE_IDLE_OP, depthTest: false, depthWrite: false,
-                });
-                const fw = new T.Mesh(fretTubeGeo, mat);
-                fw.position.set(x, wireMidY, 0);
-                fw.renderOrder = renderOrderForLayerAtZ(0, 'BOARD_FRET_WIRE');
-                fretG.add(fw);
-                fretWireMats[f] = mat;
+                _fwX[f] = xFret(f);
+                fretWireMats[f] = {
+                    color: new T.Color(FRET_WIRE_IDLE_HEX),
+                    opacity: FRET_WIRE_IDLE_OP,
+                    emissive: new T.Color(FRET_EMISSIVE),
+                    emissiveIntensity: 1,
+                };
             }
 
             // Fret dots — flat circles (CircleGeometry) lying in the XY plane and
@@ -10837,7 +11060,18 @@
             // mid-song. Chart-dependent labels (chord names, section names)
             // live in _prewarmChart.
             try {
-                if (ren && scene && cam) ren.compile(scene, cam);
+                if (ren && scene && cam) {
+                    // RiffBoard: ren.compile() only walks VISIBLE objects, so
+                    // every pre-warmed-but-hidden pool mesh (and the batched
+                    // instanced lanes/dividers, a separate instancing shader
+                    // variant) used to compile its program the first frame it
+                    // appeared mid-song: a visible hitch on phones. Briefly
+                    // show everything so all of them compile now.
+                    const hidden = [];
+                    scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+                    try { ren.compile(scene, cam); }
+                    finally { for (const o of hidden) o.visible = false; }
+                }
             } catch (e) { console.warn('[3D-Hwy] prewarm compile:', e); }
             try {
                 // Fret-number labels in the per-frame style/colour combos.
@@ -13415,13 +13649,9 @@
                             for (let f = fLow; f <= fHi; f++) {
                                 const xl = xFret(f - 1), xr = xFret(f);
                                 const laneW = Math.abs(xr - xl);
-                                const lane = pLane.get();
-                                lane.position.set((xl + xr) * 0.5, boardY + 0.02 * K, zc);
-                                lane.rotation.x = -Math.PI / 2;
-                                lane.scale.set(laneW, stripLen, 1);
                                 const odd = ((f - fLow) & 1) === 0;
-                                lane.material = odd ? mLaneOdd : mLaneEven;
-                                lane.renderOrder = 1;
+                                pLane.add(odd ? mLaneOdd : mLaneEven,
+                                    (xl + xr) * 0.5, boardY + 0.02 * K, zc, laneW, stripLen, 1);
                             }
                         }
                     }
@@ -13444,11 +13674,7 @@
                             const fDiv1 = Math.ceil(dMaxSeg);
                             for (let f = fDiv0; f <= fDiv1; f++) {
                                 if (_laneSegArp[s] && (f === fDiv0 || f === fDiv1)) continue;
-                                const div = pLaneDivider.get();
-                                div.position.set(xFret(f), yPos, zMid);
-                                div.material = mLaneDivider;
-                                div.scale.set(1, 1, dz);
-                                div.renderOrder = 2;
+                                pLaneDivider.add(mLaneDivider, xFret(f), yPos, zMid, 1, 1, dz);
                             }
                         }
                         for (let s = 0; s < _laneSegLen; s++) {
@@ -13470,11 +13696,7 @@
                                 : 1;
                             const arpSSeg = arpeggioLaneDividerXYScaleMatchFrameRim(arpMulSeg);
                             for (const xf of [fL, fR]) {
-                                const div = pLaneDivider.get();
-                                div.position.set(xFret(xf), yPos, zArpMid);
-                                div.material = mLaneDividerArp;
-                                div.scale.set(arpSSeg, arpSSeg, arpRailLen);
-                                div.renderOrder = 2;
+                                pLaneDivider.add(mLaneDividerArp, xFret(xf), yPos, zArpMid, arpSSeg, arpSSeg, arpRailLen);
                             }
                         }
                     }
@@ -13527,13 +13749,9 @@
                     for (let f = fLow; f <= fHi; f++) {
                         const xl = xFret(f - 1), xr = xFret(f);
                         const laneWStrip = Math.abs(xr - xl);
-                        const lane = pLane.get();
-                        lane.position.set((xl + xr) / 2, boardY + 0.02 * K, zLane);
-                        lane.rotation.x = -Math.PI / 2;
-                        lane.scale.set(laneWStrip, laneLen, 1);
                         const odd = ((f - fLow) & 1) === 0;
-                        lane.material = odd ? mLaneOdd : mLaneEven;
-                        lane.renderOrder = 1;
+                        pLane.add(odd ? mLaneOdd : mLaneEven,
+                            (xl + xr) / 2, boardY + 0.02 * K, zLane, laneWStrip, laneLen, 1);
                     }
 
                     if (highwayIntensity > 0.05) {
@@ -13550,19 +13768,11 @@
                         const fDivB = Math.ceil(divMax);
                         for (let f = fDivA; f <= fDivB; f++) {
                             if (hwyLaneArpOuterDividers && (f === fDivA || f === fDivB)) continue;
-                            const div = pLaneDivider.get();
-                            div.position.set(xFret(f), yPos, -divLen * 0.5);
-                            div.material = mLaneDivider;
-                            div.scale.set(1, 1, divLen);
-                            div.renderOrder = 2;
+                            pLaneDivider.add(mLaneDivider, xFret(f), yPos, -divLen * 0.5, 1, 1, divLen);
                         }
                         if (hwyLaneArpOuterDividers) {
                             for (const xf of [fDivA, fDivB]) {
-                                const div = pLaneDivider.get();
-                                div.position.set(xFret(xf), yPos, zLane);
-                                div.material = mLaneDividerArp;
-                                div.scale.set(arpLaneS, arpLaneS, laneLen);
-                                div.renderOrder = 2;
+                                pLaneDivider.add(mLaneDividerArp, xFret(xf), yPos, zLane, arpLaneS, arpLaneS, laneLen);
                             }
                         }
                     }
@@ -13577,11 +13787,7 @@
                     const extYPos = boardY + 0.03 * K;
                     mLaneDividerExt.opacity = Math.max(0.3, 0.3 + highwayIntensity * 0.15);
                     for (let f = 0; f <= NFRETS; f++) {
-                        const div = pLaneDivider.get();
-                        div.position.set(xFret(f), extYPos, extZMid);
-                        div.material = mLaneDividerExt;
-                        div.scale.set(1, 1, extLaneLen);
-                        div.renderOrder = 2;
+                        pLaneDivider.add(mLaneDividerExt, xFret(f), extYPos, extZMid, 1, 1, extLaneLen);
                     }
                 }
             }
@@ -13638,10 +13844,8 @@
                 for (const b of beats) {
                     const meas = b.measure !== lastM; lastM = b.measure;
                     if (b.time < t0 || b.time > t1) continue;
-                    const bl2 = pBeat.get();
-                    bl2.material = meas ? mBeatM : mBeatQ;
-                    bl2.scale.set(bw2, 1, 1);
-                    bl2.position.set(board.min - 2 * K, S_BASE - NH / 2 - 1.5 * K, dZ(b.time - now));
+                    const bx = board.min - 2 * K, by = S_BASE - NH / 2 - 1.5 * K, bz = dZ(b.time - now);
+                    pBeat.add(meas ? mBeatM : mBeatQ, bx, by, bz, bx + bw2, by, bz);
                 }
             }
 
@@ -14059,6 +14263,14 @@
             if (imPMXLines) imPMXLines.count = 0;
             if (imFHXFill)  imFHXFill.count  = 0;
             if (imFHXLines) imFHXLines.count = 0;
+            // RiffBoard: an InstancedMesh with count 0 still costs a full
+            // draw-call setup (program, uniforms) every frame; hide empty ones.
+            if (imPMTech) imPMTech.visible = _imPMTechCount > 0;
+            if (imFHTech) imFHTech.visible = _imFHTechCount > 0;
+            if (imPMXFill)  imPMXFill.visible  = false;
+            if (imPMXLines) imPMXLines.visible = false;
+            if (imFHXFill)  imFHXFill.visible  = false;
+            if (imFHXLines) imFHXLines.visible = false;
 
             pbEnd(5);
             pbEnd(0);
@@ -15478,12 +15690,46 @@
             }
         }
 
+        // RiffBoard: outlined overlay text is rasterised ONCE per distinct
+        // (text, font, colour) into a small canvas and blitted with drawImage
+        // afterwards. strokeText + fillText re-shape and re-rasterise the
+        // glyphs every call, which was one of the costliest things the
+        // highway did per frame on phones. The overlay canvas is 1 CSS px
+        // per pixel, so the cached bitmap matches the old output.
+        const _txtBmpCache = new Map();
+        function _txtBitmap(text, font, color) {
+            const key = font + '|' + color + '|' + text;
+            let e = _txtBmpCache.get(key);
+            if (e) return e;
+            const c = document.createElement('canvas');
+            const x = c.getContext('2d');
+            x.font = font;
+            const m = x.measureText(text);
+            const asc = m.actualBoundingBoxAscent || 10, desc = m.actualBoundingBoxDescent || 3;
+            const pad = 3;   // half the 4px outline + 1px of slack
+            const w = Math.ceil(m.width) + pad * 2 + 2;
+            const h = Math.ceil(asc + desc) + pad * 2 + 2;
+            c.width = w; c.height = h;
+            x.font = font;
+            x.textAlign = 'center';
+            x.textBaseline = 'middle';
+            x.lineWidth = 4;
+            x.lineJoin = 'round';
+            x.strokeStyle = 'rgba(0,0,0,0.8)';
+            x.strokeText(text, w / 2, h / 2);
+            x.fillStyle = color;
+            x.fillText(text, w / 2, h / 2);
+            e = { c, w, h };
+            // Don't cache while web fonts are still loading, or a fallback-font
+            // rendering would stick for the session.
+            if (typeof document !== 'undefined' && document.fonts && document.fonts.status !== 'loaded') return e;
+            if (_txtBmpCache.size > 256) _txtBmpCache.clear();
+            _txtBmpCache.set(key, e);
+            return e;
+        }
+
         function drawNotedetectLabels(ctx, W, H) {
             if (!_ndLabels.length || !cam || !_probe) return;
-            ctx.save();
-            ctx.font = 'bold 12px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
             for (const item of _ndLabels) {
                 _probe.set(item.x, item.y, item.z);
                 _probe.project(cam);
@@ -15493,14 +15739,10 @@
                 for (let i = 0; i < item.labels.length; i++) {
                     const label = item.labels[i];
                     const y = sy + (i - (item.labels.length - 1) / 2) * 15;
-                    ctx.lineWidth = 4;
-                    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-                    ctx.strokeText(label.text, sx, y);
-                    ctx.fillStyle = label.color;
-                    ctx.fillText(label.text, sx, y);
+                    const b = _txtBitmap(label.text, 'bold 12px sans-serif', label.color);
+                    ctx.drawImage(b.c, Math.round(sx - b.w / 2), Math.round(y - b.h / 2));
                 }
             }
-            ctx.restore();
         }
 
         // Score FX overlay pass — "+N" pops rising off their gems, milestone
@@ -15605,12 +15847,8 @@
                     const sx = (_probe.x * 0.5 + 0.5) * W;
                     const sy2 = (-_probe.y * 0.5 + 0.5) * H - t * 30;
                     ctx.globalAlpha = t < 0.4 ? 1 : 1 - (t - 0.4) / 0.6;
-                    ctx.font = `bold ${13 + (p.mult - 1) * 2}px '${pal.font}', sans-serif`;
-                    ctx.lineWidth = 4;
-                    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-                    ctx.strokeText(p.text, sx, sy2);
-                    ctx.fillStyle = pal.accent;
-                    ctx.fillText(p.text, sx, sy2);
+                    const b = _txtBitmap(p.text, `bold ${13 + (p.mult - 1) * 2}px '${pal.font}', sans-serif`, pal.accent);
+                    ctx.drawImage(b.c, Math.round(sx - b.w / 2), Math.round(sy2 - b.h / 2));
                 }
                 ctx.globalAlpha = 1;
             }
@@ -16051,7 +16289,7 @@
             if (ren) { ren.dispose(); ren = null; }
             scene = cam = noteG = beatG = lblG = fretG = tuningLblG = null;
             ambLight = dirLight = null;
-            mStr = []; mGlow = []; mSus = []; mStrHitOutline = []; mAccentOutline = []; mAccentCore = []; mAccentHaloNear = []; mAccentHaloMid = []; mAccentHaloFar = []; _accentShellsByString = []; mWhiteOutline = mSusOutline = null; mMissOutline = null; mHitSusOutline = null; stringLines = []; stringLineGlows = []; _boardPlaneMat = null; fretWireMats = []; fretTubeGeo?.dispose?.(); fretTubeGeo = null;
+            mStr = []; mGlow = []; mSus = []; mStrHitOutline = []; mAccentOutline = []; mAccentCore = []; mAccentHaloNear = []; mAccentHaloMid = []; mAccentHaloFar = []; _accentShellsByString = []; mWhiteOutline = mSusOutline = null; mMissOutline = null; mHitSusOutline = null; stringLines = []; stringLineGlows = []; _boardPlaneMat = null; fretWireMats = []; _fwIdleIM = _fwActiveIM = null; _fwSolo = []; _fwSig = ''; fretTubeGeo?.dispose?.(); fretTubeGeo = null;
             for (const m of _inlayMats) m?.dispose?.(); _inlayMats = []; _inlayLabels = [];
             // mTapChevron: dispose explicitly — if no tap marker ever
             // spawned a pooled mesh, the scene.traverse() pass above never
@@ -16069,6 +16307,7 @@
             mBarre?.dispose?.(); mBarre = null;
             _paletteColorTmp = null;
             lyricsCanvas = lyricsCtx = null;
+            _ovlDrew = true; _ovlHidden = false;
             projMeshArr = null;
             _probe = null;
             _drawNextByString = null; _drawRecentByString = null;
@@ -16361,6 +16600,10 @@
                     }
                 }
                 update(bundle);
+                if (pLane) pLane.flush();
+                if (pLaneDivider) pLaneDivider.flush();
+                if (pBeat) pBeat.flush();
+                _fretWiresFlush();
                 camUpdate(bundle);
 
                 // Background animations (#13). Compute frame dt once,
@@ -16456,6 +16699,12 @@
                     _sparkUpdate(_jdt);
                     _streakHeat += (Math.min(1, _streakHits / 16) - _streakHeat) * 0.08;   // #7 ease heat
                 }
+                // RiffBoard: world matrices for the VISIBLE scene graph only.
+                // The pools pre-warm hundreds of hidden meshes and three.js
+                // would otherwise recompute every one of them every frame
+                // (~900 objects vs ~150 drawn). Hidden objects are refreshed
+                // the frame they become visible.
+                _updateVisibleMatrices(scene);
                 {
                     const comp = (_bloom && !_ssActive()) ? _bloomEnsure() : null;
                     if (comp) {
@@ -16471,7 +16720,9 @@
                     }
                 }
                 if (lyricsCtx && lyricsCanvas) {
-                    lyricsCtx.clearRect(0, 0, lyricsCanvas.width, lyricsCanvas.height);
+                    if (_ovlDrew) lyricsCtx.clearRect(0, 0, lyricsCanvas.width, lyricsCanvas.height);
+                    else if (!_ovlHidden) { lyricsCanvas.style.visibility = 'hidden'; _ovlHidden = true; }
+                    _ovlDrew = false;
                     // Capture the actual lyrics-banner bottom so overlay cards
                     // step down past every wrapped row, not just a 2-row estimate.
                     let lyricsBottom = 0;

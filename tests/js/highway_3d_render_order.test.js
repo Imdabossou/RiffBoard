@@ -82,7 +82,8 @@ function zZeroRenderOrder() {
 test('lane quads use renderOrder 1', () => {
     assert.match(
         src(),
-        /lane\.renderOrder\s*=\s*1\s*;/,
+        // RiffBoard: lanes are drawn batched (instPool); the pool's render order is 1.
+        /instPool\(\s*noteG\s*,\s*gLanePlane\s*,\s*\[[^\]]*\]\s*,\s*1\s*,/,
         'lane quads must use renderOrder = 1 (bottom-most visible layer)',
     );
 });
@@ -90,7 +91,8 @@ test('lane quads use renderOrder 1', () => {
 test('fret dividers use renderOrder 2', () => {
     assert.match(
         src(),
-        /div\.renderOrder\s*=\s*2\s*;/,
+        // RiffBoard: dividers are drawn batched (instPool); the pool's render order is 2.
+        /instPool\(\s*noteG\s*,\s*gLaneDivider\s*,\s*\[[^\]]*\]\s*,\s*2\s*,/,
         'fret dividers must use renderOrder = 2, above lane (1)',
     );
 });
@@ -173,13 +175,13 @@ test('static fret wires use bowed TubeGeometry + MeshStandardMaterial, named boa
     );
     assert.match(
         s,
-        /new\s+T\.Mesh\(\s*fretTubeGeo\s*,\s*mat\s*\)/,
-        'buildBoard fret wires must reuse the shared fretTubeGeo (not T.Line)',
+        /new\s+T\.InstancedMesh\(\s*fretTubeGeo\s*,\s*mat\s*,/,
+        'buildBoard fret wires must reuse the shared fretTubeGeo (not T.Line), batched',
     );
     assert.match(
         s,
-        /fw\.renderOrder\s*=\s*renderOrderForLayerAtZ\(\s*0\s*,\s*'BOARD_FRET_WIRE'\s*\)\s*;/,
-        'buildBoard fret wire mesh must use BOARD_FRET_WIRE',
+        /const\s+wireRO\s*=\s*renderOrderForLayerAtZ\(\s*0\s*,\s*'BOARD_FRET_WIRE'\s*\)\s*;/,
+        'buildBoard fret wire meshes must use BOARD_FRET_WIRE',
     );
     assert.match(
         s,
@@ -192,8 +194,8 @@ test('static fret wires use bowed TubeGeometry + MeshStandardMaterial, named boa
     // value, so a retune is a deliberate two-line change here.
     assert.match(
         s,
-        /color\s*:\s*FRET_WIRE_IDLE_HEX/,
-        'fret wire material must take its default color from FRET_WIRE_IDLE_HEX',
+        /_fwIdleIM\s*=\s*mkWireIM\(\s*mkWireMat\(\s*FRET_WIRE_IDLE_HEX\s*,\s*FRET_WIRE_IDLE_OP\s*\)\s*\)/,
+        'the idle fret wire batch must take its color from FRET_WIRE_IDLE_HEX',
     );
     assert.match(
         s,
@@ -207,18 +209,18 @@ test('static fret wires use bowed TubeGeometry + MeshStandardMaterial, named boa
     // isn't pinned.
     assert.match(
         s,
-        /color\s*:\s*FRET_WIRE_IDLE_HEX[\s\S]{0,400}?depthTest\s*:\s*false/,
+        /mkWireMat\s*=\s*\(hex,\s*op\)\s*=>\s*new\s+T\.MeshStandardMaterial\(\{[\s\S]{0,400}?depthTest\s*:\s*false/,
         'the fret wire material itself must set depthTest: false',
     );
     assert.match(
         s,
-        /color\s*:\s*FRET_WIRE_IDLE_HEX[\s\S]{0,400}?depthWrite\s*:\s*false/,
+        /mkWireMat\s*=\s*\(hex,\s*op\)\s*=>\s*new\s+T\.MeshStandardMaterial\(\{[\s\S]{0,400}?depthWrite\s*:\s*false/,
         'the fret wire material itself must set depthWrite: false (no z-buffer pollution)',
     );
     assert.match(
         s,
-        /fretWireMats\s*\[\s*f\s*\]\s*=\s*mat\s*;/,
-        'buildBoard must store each wire material in fretWireMats[f]',
+        /fretWireMats\s*\[\s*f\s*\]\s*=\s*\{\s*color\s*:\s*new\s+T\.Color\(\s*FRET_WIRE_IDLE_HEX\s*\)/,
+        'buildBoard must seed each wire state in fretWireMats[f] at the idle tier',
     );
 });
 
@@ -475,6 +477,6 @@ test('static fret wire layer is above string mesh and note symbols', () => {
     assert.ok(layerIndex('BOARD_FRET_WIRE') > layerIndex('BOARD_STRING'), 'fret wire must be above string mesh');
     assert.ok(layerIndex('BOARD_FRET_WIRE') > layerIndex('TECHNIQUE_MARKER'), 'fret wire must be above note symbols');
     assert.ok(zZeroRenderOrder() + layerIndex('BOARD_FRET_WIRE') < 1000, 'fret wire must be below technique labels (1000)');
-    assert.match(src(), /fw\.renderOrder\s*=\s*renderOrderForLayerAtZ\(\s*0\s*,\s*'BOARD_FRET_WIRE'\s*\)\s*;/, 'buildBoard fret wire must use BOARD_FRET_WIRE');
+    assert.match(src(), /const\s+wireRO\s*=\s*renderOrderForLayerAtZ\(\s*0\s*,\s*'BOARD_FRET_WIRE'\s*\)\s*;/, 'buildBoard fret wire must use BOARD_FRET_WIRE');
     assert.match(src(), /mesh\.renderOrder\s*=\s*renderOrderForLayerAtZ\(\s*0\s*,\s*'BOARD_STRING'\s*\)\s*;/, 'string mesh must use BOARD_STRING');
 });

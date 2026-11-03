@@ -295,9 +295,17 @@
         const flats  = ['C','Db','D','Eb', 'E','F','Gb','G','Ab','A','Bb', 'B'];
         return { note: (useFlats ? flats : sharps)[((rounded % 12) + 12) % 12], cents };
     }
+    // RiffBoard: write-on-change helpers. Tuner frames arrive ~50x a second;
+    // re-setting identical classes/text re-styled and repainted the topbar
+    // (which sits under a backdrop blur) every time.
+    function _setCls(el, cls) { if (el.className !== cls) el.className = cls; }
+    function _setTxt(el, txt) { if (el && el.textContent !== txt) el.textContent = txt; }
     function _applyFrame(frame) {
         const host = document.getElementById('v3-badge-tuner');
         if (!host) return;
+        // Nobody can see the topbar tuner while the player covers the screen.
+        const player = document.getElementById('player');
+        if (player && player.classList.contains('active')) return;
         const noteEl = host.querySelector('[data-tuner-note]');
         const hzEl = host.querySelector('[data-tuner-hz]');
         const segs = host.querySelectorAll('[data-tuner-seg]');
@@ -306,20 +314,20 @@
             const fallbackNote = typeof settings.tuning === 'string'
                 ? (TUNING_NOTE[settings.tuning] || 'E')
                 : lowStringNote(settings.tuning);
-            if (noteEl) noteEl.textContent = fallbackNote;
-            if (hzEl) hzEl.textContent = Math.round(settings.reference_pitch || 440) + 'hz';
-            segs.forEach((s, i) => { s.className = 'w-5 h-[3px] rounded-full ' + _SEG_BASE[i]; });
+            _setTxt(noteEl, fallbackNote);
+            _setTxt(hzEl, Math.round(settings.reference_pitch || 440) + 'hz');
+            segs.forEach((s, i) => { _setCls(s, 'w-5 h-[3px] rounded-full ' + _SEG_BASE[i]); });
             return;
         }
         // Always free-tune: derive note + cents from raw freq, ignoring tuning target.
         const { freq } = frame;
         const { note, cents } = _freeTuneCents(freq, _preferFlats(settings.tuning), settings.reference_pitch);
-        if (noteEl) noteEl.textContent = note;
-        if (hzEl) hzEl.textContent = Math.round(freq) + 'hz';
+        _setTxt(noteEl, note);
+        _setTxt(hzEl, Math.round(freq) + 'hz');
         // cents ±25 maps to indices 0–10; centre (0¢) = index 5, sharp (+) = top (0), flat (–) = bottom (10).
         const activeIdx = Math.max(0, Math.min(10, 5 - Math.round(cents / 5)));
         segs.forEach((s, i) => {
-            s.className = 'w-5 h-[3px] rounded-full ' + (i === activeIdx ? _segActiveClass(i) : _SEG_BASE[i]);
+            _setCls(s, 'w-5 h-[3px] rounded-full ' + (i === activeIdx ? _segActiveClass(i) : _SEG_BASE[i]));
         });
     }
 
