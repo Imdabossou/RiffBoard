@@ -111,8 +111,6 @@
     <link rel="stylesheet" href="/static/fonts/rubik.css">
     <link rel="stylesheet" href="/static/style.css">
     <!-- v0.3.0 shell styles (radial-gradient bg, custom scrollbars). -->
-    <link rel="stylesheet" href="/static/vendor/shepherd.css">
-    <link rel="stylesheet" href="/static/tour-engine.css">
     <link rel="stylesheet" href="/static/v3/v3.css">
     <link rel="stylesheet" href="/static/riffboard/riffboard.css">
     <!-- Per-site colours (CONFIG_DIR/site/site.json); empty when unbranded. -->
@@ -1039,8 +1037,8 @@
          every visit. -->
     <script type="module" src="/static/app.js"></script>
     <script defer src="/static/audio-mixer.js"></script>
-    <script defer src="/static/vendor/shepherd.min.js"></script>
-    <script defer src="/static/tour-engine.js"></script>
+    <!-- RiffBoard: the guided-tour system (tour-engine.js + Shepherd) is not
+         loaded; its "?" button had no tours to show on this site. -->
     <!-- Shell: brand helper, then the shell (sidebar/topbar/routing). Loaded
          after app.js/audio-mixer so window.showScreen and window.feedBack(.audio)
          exist. -->
@@ -1063,6 +1061,7 @@
     <script defer src="/static/v3/player-chrome.js"></script>
     <!-- RiffBoard: leaderboards screen, end-of-run name entry, about page. -->
     <script defer src="/static/riffboard/modes.js"></script>
+    <script defer src="/static/riffboard/player-ui.js"></script>
     <script defer src="/static/riffboard/leaderboard.js"></script>
     <!-- Detachable panes. The manager first; then the hosts, which register
          themselves with it; then the chip and the launcher, which drive it.

@@ -162,7 +162,7 @@
  {
   "id": "note_detect",
   "name": "Note Detection",
-  "version": "1.32.2",
+  "version": "1.32.3",
   "nav": null,
   "type": null,
   "enabled": true,

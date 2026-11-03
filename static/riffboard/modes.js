@@ -137,6 +137,12 @@
     }
     rb.play = (filename, arrangement, m) => startSong(filename, arrangement, undefined, m === 'score' ? 'score' : 'practice');
 
+    function micUsable() {
+        if (!window.isSecureContext || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return false;
+        const nd = window.noteDetect;
+        const st = nd && typeof nd.getMicStatus === 'function' ? nd.getMicStatus() : null;
+        return !(st && st.blocked);
+    }
     function closeChooser() {
         const c = $('rb-chooser');
         if (!c) return;
@@ -166,6 +172,8 @@
             '<span class="rb-mode-card-title">Practice</span>' +
             '<span class="rb-mode-card-text">Pause, rewind, jump to any section, loop parts and slow it down. Not ranked.</span></button>' +
             '</div>' +
+            (micUsable() ? '' : '<p class="mt-3 text-xs text-fb-textDim">Score runs are judged by listening to you play, which needs a microphone or audio input. ' +
+                (window.isSecureContext ? 'It isn\'t available right now, so practice still works but nothing will be scored.' : 'Browsers only allow that on a secure (https://) connection, so on this address you can practise but not score.') + '</p>') +
             '<div class="mt-4 flex justify-between items-center gap-2">' +
             '<button type="button" data-board class="text-sm text-fb-primary hover:text-fb-primaryHi underline-offset-2 hover:underline">View leaderboard</button>' +
             '<button type="button" data-close class="px-4 py-2 rounded-md border border-fb-border hover:bg-fb-bg text-sm">Cancel</button></div></div>';
@@ -269,7 +277,15 @@
             if (a && !a.paused) return;   // a seek/re-buffer blip, still playing
             runLive = false;
             if (rb.voidRun) rb.voidRun('You paused the song');
-            showPaused();
+            // The "leave this song?" confirmation pauses too. Don't stack the
+            // run-stopped dialog on top of it: wait until it's answered, and
+            // only show ours if the visitor stayed.
+            const whenNoConfirm = () => {
+                if ($('fb-exit-confirm')) { setTimeout(whenNoConfirm, 250); return; }
+                const p = $('player');
+                if (p && p.classList.contains('active') && mode === 'score') showPaused();
+            };
+            whenNoConfirm();
         }, 350);
     }
 
@@ -291,7 +307,8 @@
         box.querySelector('[data-act="practice"]').addEventListener('click', () => {
             hidePaused();
             setMode('practice');
-            if (typeof window.togglePlay === 'function') window.togglePlay();
+            const a = $('audio');
+            if (typeof window.togglePlay === 'function' && (!a || a.paused)) window.togglePlay();
         });
         box.querySelector('[data-act="exit"]').addEventListener('click', () => {
             hidePaused();

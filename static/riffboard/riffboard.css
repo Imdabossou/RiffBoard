@@ -356,3 +356,146 @@ html.rb-playing #v3-sidebar {
 }
 #player .v3-upnext { background: rgb(var(--fb-bg) / .86); }
 #player .v3-live-performance-hud { background: rgb(var(--fb-bg) / .88); }
+
+/* ── Player controls (static/riffboard/player-ui.js) ─────────────────────────
+   Back button top left, settings cog bottom left. The tools rail opens from
+   the cog instead of an invisible hover strip along the left edge. */
+.rb-round-btn {
+    position: absolute;
+    z-index: 32;
+    width: 46px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.5);
+    border: 1px solid rgb(255 255 255 / 0.18);
+    color: #e2e8f0;
+    cursor: pointer;
+    transition: background-color .15s, border-color .15s;
+}
+.rb-round-btn svg { width: 24px; height: 24px; fill: currentColor; }
+.rb-round-btn:hover, .rb-round-btn:focus-visible { background: rgb(0 0 0 / 0.75); border-color: rgb(var(--fb-primary)); }
+.rb-back-btn { left: 12px; top: 12px; }
+#player.rb-has-map .rb-back-btn { top: calc(var(--rb-map-offset, 22px) + 10px); }
+@media (pointer: coarse) { #player.rb-has-map .rb-back-btn { --rb-map-offset: 30px; } }
+#player.rb-player-ui #player-hud { padding-left: 70px; }
+.rb-tools-btn { left: 12px; bottom: 16px; }
+#player.rb-tools-open .rb-tools-btn { background: rgb(var(--fb-primary)); border-color: rgb(var(--fb-primary)); color: #fff; }
+
+/* The rail: a labelled row of tools just above the cog, hidden until the cog
+   opens it. Its panels open upwards from the row. */
+#player.rb-player-ui .v3-railzone::before { display: none; }
+#player.rb-player-ui .v3-railzone {
+    top: auto;
+    bottom: 70px;
+    left: 0;
+    align-items: flex-end;
+}
+#player.rb-player-ui .v3-rail,
+#player.rb-player-ui .v3-railzone:hover .v3-rail,
+#player.rb-player-ui .v3-railzone:focus-within .v3-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    max-width: calc(100vw - 24px);
+    gap: .15rem;
+    padding: .4rem;
+    margin-left: 8px;
+    border-radius: 1rem;
+    background: rgb(var(--fb-bg) / 0.92);
+    border: 1px solid rgb(255 255 255 / 0.1);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s;
+}
+#player.rb-player-ui.rb-tools-open .v3-rail,
+#player.rb-player-ui.rb-tools-open .v3-railzone:hover .v3-rail {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    transition: opacity .18s ease, transform .18s ease;
+}
+#player.rb-player-ui .v3-rail-dot { display: none; }
+#player.rb-player-ui .v3-rail-icon,
+#player.rb-player-ui #v3-player-rail .section-practice-control--v3 .section-practice-pill {
+    width: 62px;
+    height: 62px;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding-top: 9px;
+    transform: none !important;
+}
+#player.rb-player-ui .v3-rail-border {
+    inset: auto;
+    top: 2px;
+    left: 50%;
+    width: 38px;
+    height: 38px;
+    margin-left: -19px;
+}
+#player.rb-player-ui .v3-rail-svg,
+#player.rb-player-ui #v3-player-rail .section-practice-control--v3 .section-practice-pill-svg,
+#player.rb-player-ui #v3-player-rail .section-practice-control--v3 .section-practice-pill-icon .v3-rail-svg { width: 20px; height: 20px; }
+#player.rb-player-ui #v3-player-rail .section-practice-control--v3 .section-practice-pill-icon { font-size: 1.1rem; }
+#player.rb-player-ui [data-rb-label]::after {
+    content: attr(data-rb-label);
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    bottom: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    color: currentColor;
+}
+#player.rb-player-ui .v3-rail-badge { top: 0; right: 8px; }
+#player.rb-player-ui .v3-rail-pop,
+#player.rb-player-ui #v3-player-rail .section-practice-control--v3 #section-practice-bar {
+    left: 8px;
+    right: auto;
+    top: auto;
+    bottom: calc(100% + 8px);
+    transform: none;
+    max-height: max(140px, calc(100vh - 260px));
+    max-width: min(360px, calc(100vw - 24px));
+    overflow-y: auto;
+}
+/* The section list sits inside its rail button; pin it above the row instead
+   of next to a button that may be at the far end. */
+#player.rb-player-ui #v3-player-rail .section-practice-control--v3 #section-practice-bar { position: fixed; left: 16px; bottom: 150px; }
+
+/* Upstream rows that don't apply here (no drum charts, no song editor). */
+#v3-drum-part-row,
+#player .v3-pop-row:has(#btn-edit-region),
+#player .v3-pop-row:has(#btn-return-editor) { display: none !important; }
+
+/* Mic on/off next to the mode pill. */
+.rb-mic-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.4rem;
+    margin-left: 0.4rem;
+    padding: 0.15rem 0.6rem 0.15rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: rgb(0 0 0 / 0.45);
+    color: rgb(var(--fb-textDim));
+    border: 1px solid transparent;
+    pointer-events: auto;
+    cursor: pointer;
+    vertical-align: top;
+}
+.rb-mic-btn svg { width: 14px; height: 14px; fill: currentColor; }
+.rb-mic-btn[data-state="on"] { color: #4ade80; border-color: rgb(74 222 128 / 0.4); }
+.rb-mic-btn[data-state="blocked"] { color: #fbbf24; }
+.rb-mic-btn:disabled { opacity: .6; cursor: wait; }
+.rb-mic-btn[hidden] { display: none; }

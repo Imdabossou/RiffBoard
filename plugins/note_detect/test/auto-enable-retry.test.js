@@ -83,7 +83,9 @@ test('auto-enable: first attempt fails (device not ready) → retries once, no a
     await flushPendingAsync();
 
     assert.equal(counts.gum, 2, 'auto-enable retries exactly once after the first failure');
-    assert.equal(counts.alert, 1, 'no alert on the silent first attempt; the retry surfaces the failure');
+    // RiffBoard: failures surface as a non-blocking toast, never alert() (which
+    // froze the song and, with the watchdog, repeated every few seconds).
+    assert.equal(counts.alert, 0, 'never a blocking alert');
 });
 
 test('auto-enable: a first attempt that fails then a clean stream does not over-retry', async () => {
@@ -93,7 +95,7 @@ test('auto-enable: a first attempt that fails then a clean stream does not over-
     await flushPendingAsync();
 
     assert.equal(counts.gum, 2, 'exactly one retry — auto-enable never loops past two attempts');
-    assert.equal(counts.alert, 1, 'alert is suppressed on the first attempt and shown once on the retry');
+    assert.equal(counts.alert, 0, 'never a blocking alert (RiffBoard shows a toast instead)');
 });
 
 test('auto-enable: a saved device that fails to match on the silent first attempt is PRESERVED and re-tried, not forgotten', async () => {
@@ -115,4 +117,15 @@ test('auto-enable: a saved device that fails to match on the silent first attemp
     assert.deepEqual(constraintsSeen[0].deviceId, { exact: 'cable-123' }, 'first attempt targets the saved device');
     assert.deepEqual(constraintsSeen[1].deviceId, { exact: 'cable-123' },
         'the retry STILL targets the saved device — it was preserved through the transient failure, not forgotten');
+});
+
+test('RiffBoard: a permanently unavailable mic latches — no further automatic attempts', async () => {
+    // Permission denied / insecure page / no device won't fix itself. After
+    // the bounded auto-enable, getMicStatus reports blocked so the scoring
+    // watchdog and song re-arm stop re-opening the mic every few seconds.
+    const denied = () => { const e = new Error('Permission denied'); e.name = 'NotAllowedError'; return e; };
+    const { counts } = loadWithAudio({ gumResults: [denied(), denied(), denied()] });
+    await flushPendingAsync();
+    assert.ok(counts.gum <= 2, `at most the bounded auto-enable attempts (got ${counts.gum})`);
+    assert.equal(counts.alert, 0);
 });

@@ -316,7 +316,7 @@ const _ND_AUTO_ENABLE_RETRY_MS = 1500;
 // exact build that produced it. The script tag has no `import`/`fetch`
 // hook to read package.json at load time, so this is the single
 // hand-maintained constant the diagnostic path keys off of.
-const _ND_VERSION = '1.32.2';
+const _ND_VERSION = '1.32.3';
 
 // Bleed-rescue tuning for the low-bass blind spot. A bass DI's fundamental is
 // weaker than its 2nd harmonic and an open string / neighbour often rings the
@@ -912,6 +912,20 @@ function _ndWriteSongBest(id, run) {
         localStorage.setItem(_ND_SONG_BEST_KEY, JSON.stringify(map));
     } catch (e) { /* non-fatal — best-tracking is cosmetic */ }
 }
+
+// RiffBoard: session latch for a microphone that can't be opened and won't
+// fix itself by retrying (insecure http page, permission denied, no input
+// device). While set, nothing auto-retries — the scoring watchdog used to
+// re-open the mic every 4 s and pop a blocking alert each time. A deliberate
+// user toggle of Detect clears it and tries again.
+let _ndMicBlocked = null;
+function _ndIsPermanentMicError(e) {
+    const name = e && e.name;
+    if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'NotFoundError') return true;
+    const msg = String((e && e.message) || '');
+    return /secure connection|not available in this browser|Permission denied/i.test(msg);
+}
+function _ndMicBlockedReason() { return _ndMicBlocked; }
 
 // Transient skin-themed toast (used for "Saved to …"). Self-removing.
 function _ndToast(message, ms) {
@@ -4573,8 +4587,16 @@ function createNoteDetector(options = {}) {
             // diagnostics. autoEnableTrial silences the automatic
             // first auto-enable attempt (a transient not-ready USB device
             // shouldn't pop a dialog on load — the retry surfaces it).
-            if (enabled && !autoEnableTrial) {
-                alert('Note Detection: Could not access audio input.\n\n' + e.message);
+            // RiffBoard: a non-blocking notice instead of alert() (which froze
+            // the song), shown once per blocked session rather than per retry.
+            const wasBlocked = !!_ndMicBlocked;
+            if (_ndIsPermanentMicError(e)) {
+                _ndMicBlocked = (e && e.message) || 'Microphone unavailable';
+                try { if (window.slopsmith && window.slopsmith.emit) window.slopsmith.emit('notedetect:mic-unavailable', { reason: _ndMicBlocked }); } catch (_) {}
+            }
+            if (enabled && !autoEnableTrial && !wasBlocked) {
+                _ndToast('Note detection is off: ' + ((e && e.message) || 'could not access audio input') +
+                    ' You can still play along without scoring.', 9000);
             }
             // Partial-init cleanup — if we got as far as acquiring the
             // stream or creating any AudioNodes before the throw, we
@@ -4668,7 +4690,7 @@ function createNoteDetector(options = {}) {
         }
         const playing = !!(window.slopsmith && window.slopsmith.isPlaying);
         // Only meaningful while playing AND the user wants detection on.
-        if (!playing || !detectPreference) { _wdPlayStartT = 0; _clearScoringStall(); return; }
+        if (!playing || !detectPreference || _ndMicBlocked) { _wdPlayStartT = 0; _clearScoringStall(); return; }
         if (!_wdPlayStartT) { _wdPlayStartT = now; _maxCbGapMs = 0; }  // fresh play: reset starvation gauge
         // Grace: let enable()/startAudio come up after Play before judging.
         if (now - _wdPlayStartT < 2500) return;
@@ -14898,6 +14920,7 @@ function createNoteDetector(options = {}) {
         if (typeof window !== 'undefined' && window.__ndSuppressDefault) return;
         if (enabled) return;
         if (!detectPreference) return;
+        if (_ndMicBlocked) return;
         enable().catch((e) => {
             console.warn('[note_detect] auto re-arm on song:loaded failed:',
                 e && e.message ? e.message : e);
@@ -15489,6 +15512,7 @@ function createNoteDetector(options = {}) {
             detectPreference = false;
             saveSettings();
         } else {
+            _ndMicBlocked = null;   // a deliberate toggle retries the mic
             await enable();
             detectPreference = true;
             saveSettings();
@@ -18154,6 +18178,9 @@ function createNoteDetector(options = {}) {
         disable,
         destroy,
         isEnabled: () => enabled,
+        // RiffBoard: for the player's mic toggle.
+        toggle,
+        getMicStatus: () => ({ enabled, wanted: detectPreference, blocked: _ndMicBlocked }),
         // Drill conductor (speed/goal orchestrator, ported from slopsmith
         // 1.39.1). startDrill(start, end, {label, focus, goal, speedLadder,
         // expandContext, maxExpansions}) arms a slowed A-B loop and steps the
@@ -18790,7 +18817,7 @@ function createNoteDetector(options = {}) {
             // flipped detectPreference to false during the wait — honouring a
             // stale-by-now preference would enable against the user's wishes.
             if (typeof window !== 'undefined' && window.__ndSuppressDefault) return;
-            if (enabled || !detectPreference) return;
+            if (enabled || !detectPreference || _ndMicBlocked) return;
             // Only the first attempt (one with a retry still in hand) is a
             // silent, non-committal trial — quiet alerts and a preserved device.
             autoEnableTrial = retriesLeft > 0;
