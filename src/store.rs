@@ -222,10 +222,11 @@ impl Store {
     pub fn summary(&self) -> Vec<(String, i64, i64, i64, String)> {
         let c = self.conn.lock().unwrap();
         let Ok(mut st) = c.prepare(
-            "SELECT s.filename, s.arrangement, COUNT(*), MAX(s.score),
-                    (SELECT name FROM scores t WHERE t.filename = s.filename AND t.arrangement = s.arrangement
-                       AND t.score = MAX(s.score) ORDER BY t.created_at ASC LIMIT 1)
-             FROM scores s GROUP BY s.filename, s.arrangement") else { return vec![] };
+            "SELECT a.filename, a.arrangement, a.runs, a.top,
+                    (SELECT name FROM scores t WHERE t.filename = a.filename AND t.arrangement = a.arrangement
+                       AND t.score = a.top ORDER BY t.created_at ASC LIMIT 1)
+             FROM (SELECT filename, arrangement, COUNT(*) AS runs, MAX(score) AS top
+                   FROM scores GROUP BY filename, arrangement) a") else { return vec![] };
         st.query_map([], |r| {
             Ok((
                 r.get(0)?,
@@ -273,6 +274,26 @@ pub fn write_private(path: &Path, contents: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn summary_lists_each_board_with_its_leader() {
+        let dir = std::env::temp_dir().join(format!("rb-summary-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = Store::open(&dir).unwrap();
+        store.add("a.feedpak", 0, "Low", 100, 0.5, 5, 5, 2, "1.1.1.1").unwrap();
+        store.add("a.feedpak", 0, "High", 900, 0.9, 9, 1, 7, "1.1.1.2").unwrap();
+        store.add("b.feedpak", 1, "Solo", 50, 0.2, 2, 8, 1, "1.1.1.3").unwrap();
+        let mut boards = store.summary();
+        boards.sort();
+        assert_eq!(
+            boards,
+            vec![
+                ("a.feedpak".to_string(), 0, 2, 900, "High".to_string()),
+                ("b.feedpak".to_string(), 1, 1, 50, "Solo".to_string()),
+            ]
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn names() {

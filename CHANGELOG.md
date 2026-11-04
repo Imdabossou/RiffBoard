@@ -12,6 +12,10 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
 - The out-of-the-box theme is now plain monochrome, in light and dark, with the system font.
 - A band's `site.json` can now set the whole palette and choose the Rubik font, so a theme can look exactly as its band wants.
 
+### Fixed
+
+- The Leaderboards page always said "No scores yet", because its database query failed silently. Scores were saved correctly and now show up.
+
 ## [0.2.0] - 2026-11-03
 
 ### Changed
