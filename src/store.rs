@@ -280,9 +280,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("rb-summary-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let store = Store::open(&dir).unwrap();
-        store.add("a.feedpak", 0, "Low", 100, 0.5, 5, 5, 2, "1.1.1.1").unwrap();
-        store.add("a.feedpak", 0, "High", 900, 0.9, 9, 1, 7, "1.1.1.2").unwrap();
-        store.add("b.feedpak", 1, "Solo", 50, 0.2, 2, 8, 1, "1.1.1.3").unwrap();
+        store
+            .add("a.feedpak", 0, "Low", 100, 0.5, 5, 5, 2, "1.1.1.1")
+            .unwrap();
+        store
+            .add("a.feedpak", 0, "High", 900, 0.9, 9, 1, 7, "1.1.1.2")
+            .unwrap();
+        store
+            .add("b.feedpak", 1, "Solo", 50, 0.2, 2, 8, 1, "1.1.1.3")
+            .unwrap();
         let mut boards = store.summary();
         boards.sort();
         assert_eq!(
