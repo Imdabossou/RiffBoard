@@ -72,7 +72,22 @@ If the library's files belong to a specific user, run the container as that user
 
 A RiffBoard install can present itself as your band's (or label's) own play-along site. Put a `site.json` and its images in `$CONFIG_DIR/site/`; see [docs/examples/site.json](docs/examples/site.json). You can set the site name, tagline, home-page hero text and image, a logo and favicon, an "About" card with links, and colours for the dark and light themes.
 
-Every value is validated: colours must be `#rrggbb`, links must be http(s), text is shown as plain text, and images must be PNG, JPEG, WebP or ICO files in that folder. Changes apply on the next page load, with no restart needed. Without a `site.json`, the site looks like stock RiffBoard.
+Every value is validated: colours must be `#rrggbb`, links must be http(s), text is shown as plain text, and images must be PNG, JPEG, WebP or ICO files in that folder. Changes apply on the next page load, with no restart needed. Without a `site.json`, RiffBoard uses its plain monochrome theme, in light and dark, so it suits any band out of the box.
+
+To make your own colour theme, add `dark` and `light` sections to `site.json`, as in the example. You only need the colours you want to change:
+
+| Keys | What they colour |
+|---|---|
+| `bg`, `sidebar`, `card`, `cardMuted`, `border` | Backgrounds and outlines |
+| `primary`, `primaryHi`, `onPrimary` | Buttons and highlights, their hover state, and the text on them |
+| `text`, `textDim`, `text2`, `text3`, `heading` | Text |
+| `accent`, `gold` | Warnings and top scores |
+| `link`, `linkHi`, `linkLo` | Older screens' highlights |
+| `dark900` to `dark500`, `gray50` to `gray950` | The full grey scales, if a theme wants to tint them |
+
+The site uses each visitor's system font. Set `"font": "rubik"` to use the Rubik font that ships with RiffBoard instead.
+
+The player's score colours stay as they are, because they tell players how they're doing.
 
 ### Admin tool
 

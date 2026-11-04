@@ -36,7 +36,7 @@ module.exports = {
             colors: {
                 dark: { 900: 'rgb(var(--dark-900) / <alpha-value>)', 800: 'rgb(var(--dark-800) / <alpha-value>)', 700: 'rgb(var(--dark-700) / <alpha-value>)', 600: 'rgb(var(--dark-600) / <alpha-value>)', 500: 'rgb(var(--dark-500) / <alpha-value>)' },
                 gray: Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((n) => [n, `rgb(var(--gray-${n}) / <alpha-value>)`])),
-                accent: { DEFAULT: '#4080e0', light: '#60a0ff', dark: '#2060b0' },
+                accent: { DEFAULT: 'rgb(var(--rb-link) / <alpha-value>)', light: 'rgb(var(--rb-linkHi) / <alpha-value>)', dark: 'rgb(var(--rb-linkLo) / <alpha-value>)' },
                 gold: '#e8c040',
                 // fee[dB]ack v0.3.0 palette (additive). Namespaced under `fb`
                 // so it never clashes with the legacy `accent`/`dark`/`gold`

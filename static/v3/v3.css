@@ -894,7 +894,7 @@ html[data-scoreboard="off"] #v3-live-performance-hud { display: none !important;
    only by the v3 page, so scope Rubik here. `body.font-display` (element+class)
    outranks Tailwind's `.font-display` (class) by specificity. The Rubik webfont
    is loaded via a <link> in static/v3/index.html. */
-body.font-display { font-family: Rubik, system-ui, sans-serif; }
+body.font-display { font-family: var(--rb-font, system-ui, sans-serif); }
 
 /* ── v3 Plugins page — Pedalboard ────────────────────────────────────────────
    Plugins grouped onto category "pedalboards"; each plugin is a draggable
@@ -1112,7 +1112,7 @@ body.font-display { font-family: Rubik, system-ui, sans-serif; }
 .fb-srow-icon {
     flex: none; width: 2.25rem; height: 2.25rem; border-radius: .6rem;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(14, 165, 233, .12); color: rgb(var(--fb-primaryHi));
+    background: rgb(var(--fb-primary) / .12); color: rgb(var(--fb-primaryHi));
 }
 .fb-srow-icon svg { width: 1.15rem; height: 1.15rem; }
 .fb-srow-main { flex: 1 1 auto; min-width: 0; }
@@ -1138,7 +1138,7 @@ body.font-display { font-family: Rubik, system-ui, sans-serif; }
     transition: background .15s, color .15s;
 }
 .fb-seg-btn:hover { color: rgb(var(--rb-text2)); }
-.fb-seg-btn.active { background: rgb(var(--fb-primary)); color: #04263a; }
+.fb-seg-btn.active { background: rgb(var(--fb-primary)); color: rgb(var(--fb-onPrimary)); }
 .fb-seg-btn:focus-visible { outline: 2px solid rgb(var(--fb-primaryHi)); outline-offset: 2px; }
 .fb-finetune { margin-top: .6rem; }
 .fb-finetune > summary {
@@ -1164,7 +1164,7 @@ body.font-display { font-family: Rubik, system-ui, sans-serif; }
 }
 .fb-switch input:checked + .fb-switch-track { background: rgb(var(--fb-primary)); }
 .fb-switch input:checked + .fb-switch-track::before { transform: translateX(1.1rem); }
-.fb-switch input:focus-visible + .fb-switch-track { box-shadow: 0 0 0 2px rgba(56, 189, 248, .5); }
+.fb-switch input:focus-visible + .fb-switch-track { box-shadow: 0 0 0 2px rgb(var(--fb-primaryHi) / .5); }
 
 /* "Not yet active" stub badge */
 .fb-stub-note {
@@ -1272,7 +1272,7 @@ html.fb-immersive #v3-main > .screen.active {
 .v3-azrail-letter:hover:not([disabled]),
 .v3-azrail-letter.is-active {
     color: rgb(var(--fb-primary));             /* fb-primary */
-    background: rgba(14, 165, 233, .15); /* visible target under the scrub */
+    background: rgb(var(--fb-primary) / .15); /* visible target under the scrub */
 }
 .v3-azrail-letter:focus-visible {
     outline: 2px solid rgb(var(--fb-primaryHi)); /* fb-primaryHi */
@@ -1296,7 +1296,7 @@ html.fb-immersive #v3-main > .screen.active {
     justify-content: center;
     border-radius: .7rem;
     background: rgb(var(--fb-primary));        /* fb-primary */
-    color: rgb(var(--fb-text));            /* fb-text */
+    color: rgb(var(--fb-onPrimary));
     font-size: 1.15rem;
     font-weight: 800;
     box-shadow: 0 6px 22px rgba(0, 0, 0, .45);

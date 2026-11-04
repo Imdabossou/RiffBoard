@@ -24,6 +24,32 @@ const COLOR_KEYS: [&str; 11] = [
     "border",
     "gold",
 ];
+/// The rest of the palette, for a theme that wants full control. Each is optional.
+const PALETTE_KEYS: [(&str, &str); 23] = [
+    ("onPrimary", "--fb-onPrimary"),
+    ("text2", "--rb-text2"),
+    ("text3", "--rb-text3"),
+    ("heading", "--rb-white"),
+    ("link", "--rb-link"),
+    ("linkHi", "--rb-linkHi"),
+    ("linkLo", "--rb-linkLo"),
+    ("dark900", "--dark-900"),
+    ("dark800", "--dark-800"),
+    ("dark700", "--dark-700"),
+    ("dark600", "--dark-600"),
+    ("dark500", "--dark-500"),
+    ("gray50", "--gray-50"),
+    ("gray100", "--gray-100"),
+    ("gray200", "--gray-200"),
+    ("gray300", "--gray-300"),
+    ("gray400", "--gray-400"),
+    ("gray500", "--gray-500"),
+    ("gray600", "--gray-600"),
+    ("gray700", "--gray-700"),
+    ("gray800", "--gray-800"),
+    ("gray900", "--gray-900"),
+    ("gray950", "--gray-950"),
+];
 const IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "webp", "ico"];
 
 pub fn is_asset_name(name: &str) -> bool {
@@ -122,10 +148,13 @@ fn vars(theme: Option<&Value>) -> String {
     let Some(t) = theme.and_then(Value::as_object) else {
         return String::new();
     };
-    COLOR_KEYS
+    let colors = COLOR_KEYS
         .iter()
-        .filter_map(|k| Some(format!("    --fb-{k}: {};\n", hex_rgb(t.get(*k)?)?)))
-        .collect()
+        .filter_map(|k| Some(format!("    --fb-{k}: {};\n", hex_rgb(t.get(*k)?)?)));
+    let palette = PALETTE_KEYS
+        .iter()
+        .filter_map(|(k, var)| Some(format!("    {var}: {};\n", hex_rgb(t.get(*k)?)?)));
+    colors.chain(palette).collect()
 }
 
 /// `GET /site.css`: colour overrides for dark and light themes.
@@ -134,6 +163,10 @@ pub fn css(config_dir: &Path) -> String {
     let dark = vars(raw.get("dark"));
     let light = vars(raw.get("light"));
     let mut out = String::from("/* Site branding (CONFIG_DIR/site/site.json). */\n");
+    // The default is the visitor's system font. Rubik ships with RiffBoard for themes that want it.
+    if raw.get("font").and_then(Value::as_str) == Some("rubik") {
+        out += ":root {\n    --rb-font: Rubik, system-ui, sans-serif;\n}\n";
+    }
     if !dark.is_empty() {
         out += &format!(":root,\n#player,\n.rb-on-dark {{\n{dark}}}\n");
     }
@@ -165,5 +198,23 @@ mod tests {
             assert!(!is_asset_name(bad), "{bad}");
         }
         assert!(http_url(Some(&json!("javascript:alert(1)"))).is_none());
+    }
+
+    #[test]
+    fn theme_can_set_the_whole_palette() {
+        let out = vars(Some(&json!({
+            "primary": "#db3f8f",
+            "onPrimary": "#ffffff",
+            "gray500": "#6b7280",
+            "dark900": "#050508",
+            "unknown": "#112233",
+            "text2": "not a colour",
+        })));
+        assert!(out.contains("--fb-primary: 219 63 143;"));
+        assert!(out.contains("--fb-onPrimary: 255 255 255;"));
+        assert!(out.contains("--gray-500: 107 114 128;"));
+        assert!(out.contains("--dark-900: 5 5 8;"));
+        assert!(!out.contains("112233") && !out.contains("17 34 51"));
+        assert!(!out.contains("--rb-text2"));
     }
 }

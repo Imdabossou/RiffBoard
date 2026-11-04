@@ -1,7 +1,10 @@
 /*
  * RiffBoard stylesheet: colour themes + public-build UI trims.
  *
- * RiffBoard colour themes.
+ * RiffBoard colour themes. The default set is plain monochrome, so it suits any
+ * band until they add their own colours in site.json (see the README). Score
+ * colours (good, mid, low, gold) and danger stay coloured because they carry
+ * meaning.
  *
  * Every palette colour the UI uses (Tailwind's fb-*, dark-* and gray-* scales,
  * see tailwind.config.js) is an RGB triplet variable here, so one switch
@@ -19,117 +22,129 @@
 #player,
 .rb-on-dark {
     color-scheme: dark;
-    --fb-bg: 15 23 42;
-    --fb-sidebar: 17 24 39;
-    --fb-card: 30 41 59;
-    --fb-cardMuted: 11 18 32;
-    --fb-primary: 14 165 233;
-    --fb-primaryHi: 56 189 248;
+    --fb-bg: 18 18 18;
+    --fb-sidebar: 14 14 14;
+    --fb-card: 30 30 30;
+    --fb-cardMuted: 12 12 12;
+    --fb-primary: 232 232 232;
+    --fb-primaryHi: 255 255 255;
     --fb-accent: 239 68 68;
-    --fb-text: 248 250 252;
-    --fb-textDim: 148 163 184;
-    --fb-border: 51 65 85;
+    --fb-text: 245 245 245;
+    --fb-textDim: 160 160 160;
+    --fb-border: 56 56 56;
     --fb-good: 34 197 94;
     --fb-mid: 234 179 8;
     --fb-low: 239 68 68;
     --fb-gold: 232 192 64;
-    --rb-text2: 226 232 240;
-    --rb-text3: 203 213 225;
+    --rb-text2: 229 229 229;
+    --rb-text3: 205 205 205;
     --rb-white: 255 255 255;
 
-    --dark-900: 5 5 8;
-    --dark-800: 10 10 18;
-    --dark-700: 16 16 30;
-    --dark-600: 24 24 48;
-    --dark-500: 30 30 58;
+    --dark-900: 5 5 5;
+    --dark-800: 10 10 10;
+    --dark-700: 16 16 16;
+    --dark-600: 24 24 24;
+    --dark-500: 30 30 30;
 
-    --gray-50: 249 250 251;
-    --gray-100: 243 244 246;
-    --gray-200: 229 231 235;
-    --gray-300: 209 213 219;
-    --gray-400: 156 163 175;
-    --gray-500: 107 114 128;
-    --gray-600: 75 85 99;
-    --gray-700: 55 65 81;
-    --gray-800: 31 41 55;
-    --gray-900: 17 24 39;
-    --gray-950: 3 7 18;
+    --gray-50: 250 250 250;
+    --gray-100: 245 245 245;
+    --gray-200: 229 229 229;
+    --gray-300: 212 212 212;
+    --gray-400: 163 163 163;
+    --gray-500: 115 115 115;
+    --gray-600: 82 82 82;
+    --gray-700: 64 64 64;
+    --gray-800: 38 38 38;
+    --gray-900: 23 23 23;
+    --gray-950: 10 10 10;
+    --fb-onPrimary: 18 18 18;
+    --rb-link: 232 232 232;
+    --rb-linkHi: 255 255 255;
+    --rb-linkLo: 200 200 200;
 }
 
 /* Light set. Defined once as a mixin-like block, applied two ways. */
 @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
         color-scheme: light;
-        --fb-bg: 241 245 249;
+        --fb-bg: 244 244 244;
         --fb-sidebar: 255 255 255;
         --fb-card: 255 255 255;
-        --fb-cardMuted: 226 232 240;
-        --fb-primary: 2 132 199;
-        --fb-primaryHi: 3 105 161;
+        --fb-cardMuted: 230 230 230;
+        --fb-primary: 30 30 30;
+        --fb-primaryHi: 60 60 60;
         --fb-accent: 220 38 38;
-        --fb-text: 15 23 42;
-        --fb-textDim: 71 85 105;
-        --fb-border: 203 213 225;
+        --fb-text: 20 20 20;
+        --fb-textDim: 85 85 85;
+        --fb-border: 208 208 208;
         --fb-good: 22 163 74;
         --fb-mid: 161 98 7;
         --fb-low: 220 38 38;
         --fb-gold: 161 98 7;
-        --rb-text2: 30 41 59;
-        --rb-text3: 51 65 85;
-        --rb-white: 15 23 42;
-        --dark-900: 248 250 252;
-        --dark-800: 241 245 249;
+        --rb-text2: 40 40 40;
+        --rb-text3: 60 60 60;
+        --rb-white: 20 20 20;
+        --dark-900: 250 250 250;
+        --dark-800: 244 244 244;
         --dark-700: 255 255 255;
-        --dark-600: 226 232 240;
-        --dark-500: 203 213 225;
-        --gray-50: 3 7 18;
-        --gray-100: 17 24 39;
-        --gray-200: 31 41 55;
-        --gray-300: 55 65 81;
-        --gray-400: 75 85 99;
-        --gray-500: 100 116 139;
-        --gray-600: 148 163 184;
-        --gray-700: 203 213 225;
-        --gray-800: 226 232 240;
-        --gray-900: 241 245 249;
-        --gray-950: 249 250 251;
+        --dark-600: 230 230 230;
+        --dark-500: 208 208 208;
+        --gray-50: 10 10 10;
+        --gray-100: 23 23 23;
+        --gray-200: 38 38 38;
+        --gray-300: 64 64 64;
+        --gray-400: 82 82 82;
+        --gray-500: 115 115 115;
+        --gray-600: 163 163 163;
+        --gray-700: 212 212 212;
+        --gray-800: 229 229 229;
+        --gray-900: 245 245 245;
+        --gray-950: 250 250 250;
+        --fb-onPrimary: 255 255 255;
+        --rb-link: 30 30 30;
+        --rb-linkHi: 60 60 60;
+        --rb-linkLo: 0 0 0;
     }
 }
 :root[data-theme="light"] {
     color-scheme: light;
-    --fb-bg: 241 245 249;
+    --fb-bg: 244 244 244;
     --fb-sidebar: 255 255 255;
     --fb-card: 255 255 255;
-    --fb-cardMuted: 226 232 240;
-    --fb-primary: 2 132 199;
-    --fb-primaryHi: 3 105 161;
+    --fb-cardMuted: 230 230 230;
+    --fb-primary: 30 30 30;
+    --fb-primaryHi: 60 60 60;
     --fb-accent: 220 38 38;
-    --fb-text: 15 23 42;
-    --fb-textDim: 71 85 105;
-    --fb-border: 203 213 225;
+    --fb-text: 20 20 20;
+    --fb-textDim: 85 85 85;
+    --fb-border: 208 208 208;
     --fb-good: 22 163 74;
     --fb-mid: 161 98 7;
     --fb-low: 220 38 38;
     --fb-gold: 161 98 7;
-    --rb-text2: 30 41 59;
-    --rb-text3: 51 65 85;
-    --rb-white: 15 23 42;
-    --dark-900: 248 250 252;
-    --dark-800: 241 245 249;
+    --rb-text2: 40 40 40;
+    --rb-text3: 60 60 60;
+    --rb-white: 20 20 20;
+    --dark-900: 250 250 250;
+    --dark-800: 244 244 244;
     --dark-700: 255 255 255;
-    --dark-600: 226 232 240;
-    --dark-500: 203 213 225;
-    --gray-50: 3 7 18;
-    --gray-100: 17 24 39;
-    --gray-200: 31 41 55;
-    --gray-300: 55 65 81;
-    --gray-400: 75 85 99;
-    --gray-500: 100 116 139;
-    --gray-600: 148 163 184;
-    --gray-700: 203 213 225;
-    --gray-800: 226 232 240;
-    --gray-900: 241 245 249;
-    --gray-950: 249 250 251;
+    --dark-600: 230 230 230;
+    --dark-500: 208 208 208;
+    --gray-50: 10 10 10;
+    --gray-100: 23 23 23;
+    --gray-200: 38 38 38;
+    --gray-300: 64 64 64;
+    --gray-400: 82 82 82;
+    --gray-500: 115 115 115;
+    --gray-600: 163 163 163;
+    --gray-700: 212 212 212;
+    --gray-800: 229 229 229;
+    --gray-900: 245 245 245;
+    --gray-950: 250 250 250;
+    --fb-onPrimary: 255 255 255;
+    --rb-link: 30 30 30;
+    --rb-linkHi: 60 60 60;
+    --rb-linkLo: 0 0 0;
 }
 
 /* `text-white` is used for headings on the legacy (originally dark-only)
@@ -138,6 +153,10 @@
 .text-white:not([class*="bg-fb-primary"]):not([class*="bg-accent"]):not([class*="bg-fb-accent"]):not([class*="bg-red-"]):not([class*="bg-green-"]):not([class*="bg-fb-good"]):not([class*="bg-fb-low"]):not(#player *):not(.rb-on-dark *):not(button[class*="bg-fb-primary"] *):not(.bg-gradient-to-t *) {
     color: rgb(var(--rb-white));
 }
+
+/* Text on a primary-coloured button: the default primary is pale in dark mode. */
+.text-white[class*="bg-fb-primary"],
+.text-white[class*="bg-accent"] { color: rgb(var(--fb-onPrimary)); }
 
 body { background-color: rgb(var(--fb-sidebar)); color: rgb(var(--fb-text)); }
 
@@ -209,7 +228,7 @@ body { background-color: rgb(var(--fb-sidebar)); color: rgb(var(--fb-text)); }
     padding: 0.1rem 0.5rem;
     border-radius: 999px;
     background: rgb(var(--fb-primary));
-    color: #fff;
+    color: rgb(var(--fb-onPrimary));
     text-transform: none;
     letter-spacing: 0;
     font-weight: 600;
@@ -241,7 +260,7 @@ body { background-color: rgb(var(--fb-sidebar)); color: rgb(var(--fb-text)); }
     color: rgb(var(--fb-text));
 }
 .rb-part:hover { border-color: rgb(var(--fb-primary)); }
-.rb-part.rb-part-on { background: rgb(var(--fb-primary)); border-color: rgb(var(--fb-primary)); color: #fff; }
+.rb-part.rb-part-on { background: rgb(var(--fb-primary)); border-color: rgb(var(--fb-primary)); color: rgb(var(--fb-onPrimary)); }
 
 /* Song map: section strip + playhead across the top of the player. */
 .rb-song-map {
@@ -382,7 +401,7 @@ html.rb-playing #v3-sidebar {
 @media (pointer: coarse) { #player.rb-has-map .rb-back-btn { --rb-map-offset: 30px; } }
 #player.rb-player-ui #player-hud { padding-left: 70px; }
 .rb-tools-btn { left: 12px; bottom: 16px; }
-#player.rb-tools-open .rb-tools-btn { background: rgb(var(--fb-primary)); border-color: rgb(var(--fb-primary)); color: #fff; }
+#player.rb-tools-open .rb-tools-btn { background: rgb(var(--fb-primary)); border-color: rgb(var(--fb-primary)); color: rgb(var(--fb-onPrimary)); }
 
 /* The rail: a labelled row of tools just above the cog, hidden until the cog
    opens it. Its panels open upwards from the row. */

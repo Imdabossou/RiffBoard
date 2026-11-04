@@ -14,12 +14,12 @@
   ],
   "dark": {
     "bg": "#1b1720", "sidebar": "#151219", "card": "#272030", "cardMuted": "#120f16",
-    "primary": "#db3f8f", "primaryHi": "#f06aa8", "text": "#fbf5fa", "textDim": "#b8a8b8",
+    "primary": "#db3f8f", "primaryHi": "#f06aa8", "onPrimary": "#ffffff", "text": "#fbf5fa", "textDim": "#b8a8b8",
     "border": "#3d3146", "gold": "#f4c95d"
   },
   "light": {
     "bg": "#f6f1e7", "sidebar": "#fffaf2", "card": "#fffdf8", "cardMuted": "#ece3d3",
-    "primary": "#c2307a", "primaryHi": "#a3245f", "text": "#1f1a1d", "textDim": "#5b5058",
+    "primary": "#c2307a", "primaryHi": "#a3245f", "onPrimary": "#ffffff", "text": "#1f1a1d", "textDim": "#5b5058",
     "border": "#e0d4c3", "gold": "#9a6b00"
   }
 }
