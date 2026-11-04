@@ -1,6 +1,6 @@
 {
   "name": "riffboard-browser-tests",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Frontend unit tests (node --test) and Playwright browser tests for RiffBoard.",
   "license": "AGPL-3.0-only",
   "scripts": {

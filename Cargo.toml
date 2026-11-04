@@ -1,6 +1,6 @@
 [package]
 name = "riffboard"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "AGPL-3.0-only"
 description = "Public, play-only rhythm game server with per-song leaderboards (fork of fee[dB]ack)."

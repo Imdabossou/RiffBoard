@@ -7,6 +7,8 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-04
+
 ### Changed
 
 - The out-of-the-box theme is now plain monochrome, in light and dark, with the system font.
