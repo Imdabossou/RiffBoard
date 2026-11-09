@@ -218,8 +218,14 @@ async fn only_listed_routes_are_reachable() {
         ("GET", "/api/song/..%2F..%2Fetc%2Fpasswd"),
         ("GET", "/api/plugins/tuner/routes.py"),
         ("GET", "/api/plugins/tuner/assets/..%2F..%2F..%2FCargo.toml"),
-        ("GET", "/api/plugins/tuner/assets/%2e%2e/%2e%2e/%2e%2e/Cargo.toml"),
-        ("GET", "/api/plugins/tuner/workers/..%2F..%2Fplugin.json%2F..%2F..%2F..%2FCargo.toml"),
+        (
+            "GET",
+            "/api/plugins/tuner/assets/%2e%2e/%2e%2e/%2e%2e/Cargo.toml",
+        ),
+        (
+            "GET",
+            "/api/plugins/tuner/workers/..%2F..%2Fplugin.json%2F..%2F..%2F..%2FCargo.toml",
+        ),
         ("GET", "/api/plugins/..%2F..%2Fsrc/screen.js"),
         ("GET", "/api/plugins/nope/screen.js"),
     ] {

@@ -516,7 +516,12 @@ mod tests {
         std::fs::write(base.join("secret.txt"), "s").unwrap();
         std::os::unix::fs::symlink(base.join("secret.txt"), root.join("escape.txt")).unwrap();
         assert!(resolve_in(&root, "sub/ok.txt").is_some());
-        for bad in ["../secret.txt", "sub/../../secret.txt", "escape.txt", "/etc/passwd"] {
+        for bad in [
+            "../secret.txt",
+            "sub/../../secret.txt",
+            "escape.txt",
+            "/etc/passwd",
+        ] {
             assert!(resolve_in(&root, bad).is_none(), "{bad:?}");
         }
         std::fs::remove_dir_all(&base).unwrap();
