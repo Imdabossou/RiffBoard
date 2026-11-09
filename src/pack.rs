@@ -506,6 +506,22 @@ mod tests {
         assert_eq!(safe_components("./a/b.json").unwrap(), vec!["a", "b.json"]);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn resolve_in_stays_inside_the_root() {
+        let base = std::env::temp_dir().join(format!("rb-resolve-{}", std::process::id()));
+        let root = base.join("root");
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::fs::write(root.join("sub/ok.txt"), "x").unwrap();
+        std::fs::write(base.join("secret.txt"), "s").unwrap();
+        std::os::unix::fs::symlink(base.join("secret.txt"), root.join("escape.txt")).unwrap();
+        assert!(resolve_in(&root, "sub/ok.txt").is_some());
+        for bad in ["../secret.txt", "sub/../../secret.txt", "escape.txt", "/etc/passwd"] {
+            assert!(resolve_in(&root, bad).is_none(), "{bad:?}");
+        }
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
     #[test]
     fn jsonc_comments_are_stripped_outside_strings() {
         let v = parse_jsonc("{\"a\": \"x//y\", // c\n \"b\": /* z */ 2}").unwrap();

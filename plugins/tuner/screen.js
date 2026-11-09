@@ -71,6 +71,8 @@
     }
 
     function _loadVizScript(name) {
+        // Names come from saved settings: only plain identifiers map to a script.
+        if (!/^[A-Za-z0-9_-]+$/.test(String(name))) return Promise.reject(new Error('Tuner: bad visualization name'));
         return _loadScript(`/api/plugins/tuner/visualization/${name}.js`);
     }
 

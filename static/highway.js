@@ -69,6 +69,18 @@ import {
     strumGroupBuckets,
 } from './js/highway-draw.js';
 
+/** `u` as a same-origin path ("/x/y?q"), or null for anything else. */
+function _sameOriginPath(u) {
+    if (typeof u !== 'string') return null;
+    try {
+        const url = new URL(u, location.href);
+        if (url.origin !== location.origin) return null;
+        return url.pathname + url.search;
+    } catch (_) {
+        return null;
+    }
+}
+
 function createHighway() {
   // R3c: per-instance mutable state in one object, so extracted renderer/ws
   // modules can close over it as a factory arg without cross-panel sharing.
@@ -2112,6 +2124,9 @@ function createHighway() {
                                     document.body.appendChild(banner);
                                 }
     
+                                // Only ever play audio from this server: a path like /audio/... or
+                                // /api/... resolved against the page, never another origin or scheme.
+                                if (msg.audio_url) msg.audio_url = _sameOriginPath(msg.audio_url);
                                 if (msg.audio_url) {
                                     const audio = document.getElementById('audio');
                                     const audioFilename = msg.audio_url.split('/').pop();

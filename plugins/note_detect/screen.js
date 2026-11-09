@@ -316,7 +316,7 @@ const _ND_AUTO_ENABLE_RETRY_MS = 1500;
 // exact build that produced it. The script tag has no `import`/`fetch`
 // hook to read package.json at load time, so this is the single
 // hand-maintained constant the diagnostic path keys off of.
-const _ND_VERSION = '1.32.3';
+const _ND_VERSION = '1.32.4';
 
 // Bleed-rescue tuning for the low-bass blind spot. A bass DI's fundamental is
 // weaker than its 2nd harmonic and an open string / neighbour often rings the
@@ -16829,7 +16829,7 @@ function createNoteDetector(options = {}) {
             + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
         // Short random suffix avoids collisions when two panels
         // emit a song:play in the same second (splitscreen).
-        const rand = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+        const rand = (crypto.getRandomValues(new Uint32Array(1))[0] & 0xffffff).toString(16).padStart(6, '0');
         _liveSessionId = `${ts}_${rand}`;
         // Mirror into a handle that is NOT cleared on song:ended, so the
         // training-bundle upload can still locate this take's JSONL even

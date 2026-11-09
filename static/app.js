@@ -635,6 +635,11 @@ async function uploadSongs(fileList) {
 // (searchCF, installCF, loginCF, searchUG, buildFromUG, etc.)
 
 // ── Retune ───────────────────────────────────────────────────────────────
+/** Text made safe to place inside HTML markup. */
+function _escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
 function retuneSong(filename, title, tuning, target) {
     target = target || 'E Standard';
     if (!confirm(`Convert "${title}" from ${tuning} to ${target}?`)) return;
@@ -666,7 +671,7 @@ function retuneSong(filename, title, tuning, target) {
                 <div class="text-center">
                     <div class="text-3xl mb-3">✓</div>
                     <h3 class="text-lg font-bold text-white mb-1">Done!</h3>
-                    <p class="text-sm text-gray-400 mb-5">${msg.filename}</p>
+                    <p class="text-sm text-gray-400 mb-5">${_escHtml(msg.filename)}</p>
                     <button onclick="document.getElementById('retune-modal').remove();loadLibrary()"
                         class="bg-accent hover:bg-accent-light px-6 py-2 rounded-xl text-sm font-semibold text-white transition">OK</button>
                 </div>`;
@@ -676,7 +681,7 @@ function retuneSong(filename, title, tuning, target) {
                 <div class="text-center">
                     <div class="text-3xl mb-3">✕</div>
                     <h3 class="text-lg font-bold text-red-400 mb-1">Failed</h3>
-                    <p class="text-sm text-gray-400 mb-5">${msg.error}</p>
+                    <p class="text-sm text-gray-400 mb-5">${_escHtml(msg.error)}</p>
                     <button onclick="document.getElementById('retune-modal').remove()"
                         class="bg-dark-600 hover:bg-dark-500 px-6 py-2 rounded-xl text-sm text-gray-300 transition">Close</button>
                 </div>`;
