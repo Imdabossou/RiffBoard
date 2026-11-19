@@ -1,8 +1,6 @@
-<p align="center"><img src="docs/screenshots/icon.png" width="96" alt="RiffBoard icon"></p>
+# <img src="docs/screenshots/icon.png" width="36" align="top" alt=""> RiffBoard
 
-<h1 align="center">RiffBoard</h1>
-
-<p align="center">A public, play-only rhythm game for guitar and bass, with a highscore table for every song.</p>
+A public, play-only rhythm game for guitar and bass, with a highscore table for every song.
 
 ![RiffBoard home page](docs/screenshots/home-dark.webp)
 
