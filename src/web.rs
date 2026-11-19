@@ -92,10 +92,8 @@ impl RateLimiter {
 }
 
 // Leaderboard tunables (see README "Score checks").
-const MIN_ELAPSED_FRACTION: f64 = 0.95;
-const ELAPSED_GRACE_S: f64 = 3.0;
-const MAX_JUDGED_SLACK: f64 = 1.05;
-const MIN_JUDGED_FRACTION: f64 = 0.5;
+// Leaderboard rules are shared with the game (crates/core/src/rules.rs).
+use riffboard_core::rules::{MIN_ELAPSED_FRACTION, check_result};
 const RUN_TTL_EXTRA_S: u64 = 900;
 const MAX_RUNS_PER_IP: usize = 4;
 const MAX_RUNS_TOTAL: usize = 5000;
@@ -267,8 +265,21 @@ async fn serve_file(path: PathBuf, req: Request) -> Response {
     }
 }
 
+/// The game page's Content-Security-Policy: everything from this origin only;
+/// `wasm-unsafe-eval` lets the page compile the game's WebAssembly, nothing
+/// else. Inline style attributes are allowed (no inline scripts).
+const GAME_CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; \
+    style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; \
+    connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; \
+    form-action 'none'; frame-ancestors 'none'";
+
 async fn index(State(s): S, req: Request) -> Response {
-    no_cache(serve_file(s.cfg.static_dir.join("v3/index.html"), req).await)
+    let mut r = no_cache(serve_file(s.cfg.static_dir.join("game/index.html"), req).await);
+    r.headers_mut().insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(GAME_CSP),
+    );
+    r
 }
 
 async fn favicon(State(s): S, req: Request) -> Response {
@@ -729,31 +740,6 @@ async fn stream_chart(
 // ── Leaderboard ──────────────────────────────────────────────────────────────
 
 /// The server-side checks on a finished run. Returns (score, accuracy).
-fn check_result(
-    elapsed: f64,
-    judgeable: usize,
-    last_note: f64,
-    hits: i64,
-    misses: i64,
-) -> Result<(i64, f64), &'static str> {
-    if elapsed + ELAPSED_GRACE_S < last_note * MIN_ELAPSED_FRACTION {
-        return Err("that run finished too quickly to count");
-    }
-    let judged = (hits + misses) as f64;
-    if judged > judgeable as f64 * MAX_JUDGED_SLACK + 2.0 {
-        return Err("more notes judged than the chart has");
-    }
-    if judged < judgeable as f64 * MIN_JUDGED_FRACTION {
-        return Err("only full runs count for the leaderboard");
-    }
-    let accuracy = hits as f64 / judged.max(1.0);
-    // Same formula as the client: round(hits * 100 * accuracy), half up.
-    Ok((
-        (hits as f64 * 100.0 * accuracy + 0.5).floor() as i64,
-        accuracy,
-    ))
-}
-
 fn count(v: Option<&Value>) -> Option<i64> {
     match v? {
         Value::Number(n) => n.as_i64().or_else(|| {

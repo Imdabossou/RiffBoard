@@ -1,0 +1,11 @@
+[package]
+name = "riffboard-core"
+version = "0.4.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+description = "RiffBoard game rules shared by the server and the browser game: chart model, judging, scoring, pitch detection."
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

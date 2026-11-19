@@ -1,0 +1,260 @@
+/* RiffBoard game client. Colours are "R G B" triplets so a band's /site.css
+   (loaded after this file) can override them; the default is monochrome
+   with the system accent where the browser exposes one. */
+
+:root {
+  --fb-bg: 18 18 20;
+  --fb-sidebar: 24 24 27;
+  --fb-card: 30 30 34;
+  --fb-cardMuted: 24 24 27;
+  --fb-text: 238 238 240;
+  --fb-textDim: 160 160 170;
+  --fb-border: 54 54 60;
+  --fb-primary: 238 238 240;
+  --fb-onPrimary: 18 18 20;
+  --fb-gold: 230 190 80;
+  --accent: rgb(var(--fb-primary));
+  --on-accent: rgb(var(--fb-onPrimary));
+  --rb-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --fb-bg: 248 248 249;
+    --fb-sidebar: 255 255 255;
+    --fb-card: 255 255 255;
+    --fb-cardMuted: 240 240 242;
+    --fb-text: 22 22 26;
+    --fb-textDim: 92 92 102;
+    --fb-border: 222 222 228;
+    --fb-primary: 22 22 26;
+    --fb-onPrimary: 255 255 255;
+    --fb-gold: 150 105 0;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --fb-bg: 248 248 249;
+  --fb-sidebar: 255 255 255;
+  --fb-card: 255 255 255;
+  --fb-cardMuted: 240 240 242;
+  --fb-text: 22 22 26;
+  --fb-textDim: 92 92 102;
+  --fb-border: 222 222 228;
+  --fb-primary: 22 22 26;
+  --fb-onPrimary: 255 255 255;
+  --fb-gold: 150 105 0;
+  color-scheme: light;
+}
+
+/* Unbranded installs use the system accent colour where available. */
+@supports (color: AccentColor) {
+  :root:not(.branded) {
+    --accent: AccentColor;
+    --on-accent: AccentColorText;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; }
+
+body {
+  background: rgb(var(--fb-bg));
+  color: rgb(var(--fb-text));
+  font-family: var(--rb-font);
+  font-size: 16px;
+  line-height: 1.45;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; }
+
+button, input, select { font: inherit; color: inherit; }
+
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+
+.top {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px max(16px, env(safe-area-inset-left));
+  background: rgb(var(--fb-sidebar));
+  border-bottom: 1px solid rgb(var(--fb-border));
+}
+
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 700; font-size: 18px; min-width: 0; }
+.brand img { height: 34px; width: auto; display: block; }
+.brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.top nav { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.top nav a {
+  text-decoration: none; padding: 8px 12px; border-radius: 8px;
+  color: rgb(var(--fb-textDim)); font-weight: 600; font-size: 15px;
+}
+.top nav a:hover { color: rgb(var(--fb-text)); background: rgb(var(--fb-cardMuted)); }
+.top nav a[aria-current="page"] { color: rgb(var(--fb-text)); background: rgb(var(--fb-cardMuted)); }
+
+.icon-btn {
+  display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 10px;
+  border: 1px solid transparent; background: transparent; cursor: pointer; padding: 0;
+}
+.icon-btn:hover { background: rgb(var(--fb-cardMuted)); }
+.icon-btn svg { width: 22px; height: 22px; fill: currentColor; }
+
+@media (max-width: 640px) {
+  .top { gap: 8px; }
+  .top nav a { padding: 8px; font-size: 14px; }
+  .brand img { height: 28px; }
+}
+
+/* ── Common pieces ─────────────────────────────────────────────────────── */
+
+h1 { font-size: clamp(26px, 5vw, 40px); line-height: 1.1; margin: 0 0 8px; }
+h2 { font-size: 20px; margin: 0 0 12px; }
+.dim { color: rgb(var(--fb-textDim)); }
+.small { font-size: 14px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 46px; padding: 0 20px; border-radius: 12px; cursor: pointer;
+  border: 1px solid rgb(var(--fb-border)); background: rgb(var(--fb-card));
+  font-weight: 650; text-decoration: none;
+}
+.btn:hover { border-color: rgb(var(--fb-textDim)); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn.block { width: 100%; }
+
+.card {
+  background: rgb(var(--fb-card)); border: 1px solid rgb(var(--fb-border));
+  border-radius: 16px; padding: 18px;
+}
+
+input[type="text"], input[type="search"], select {
+  width: 100%; min-height: 46px; padding: 0 14px; border-radius: 12px;
+  border: 1px solid rgb(var(--fb-border)); background: rgb(var(--fb-cardMuted));
+}
+input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+.notice { padding: 12px 14px; border-radius: 12px; background: rgb(var(--fb-cardMuted)); font-size: 14px; }
+.error { color: #d33; }
+
+/* ── Library ───────────────────────────────────────────────────────────── */
+
+.hero { position: relative; padding: 36px 0 24px; }
+.hero.has-image { padding: 72px 0 32px; }
+.hero-bg {
+  position: absolute; inset: 0 calc(50% - 50vw); background-size: cover; background-position: center;
+  opacity: 0.22; z-index: -1; mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+.hero p { max-width: 640px; margin: 0; }
+
+.search { margin: 8px 0 20px; max-width: 420px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; padding-bottom: 40px; }
+@media (max-width: 480px) { .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; } }
+
+.song {
+  display: block; text-decoration: none; border-radius: 14px; overflow: hidden;
+  background: rgb(var(--fb-card)); border: 1px solid rgb(var(--fb-border));
+}
+.song:hover { border-color: rgb(var(--fb-textDim)); }
+.cover { aspect-ratio: 1; width: 100%; display: block; object-fit: cover; background: rgb(var(--fb-cardMuted)); }
+.song .meta { padding: 10px 12px 12px; }
+.song .title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song .sub { font-size: 14px; color: rgb(var(--fb-textDim)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Song page ─────────────────────────────────────────────────────────── */
+
+.song-page { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 28px; padding: 28px 0 48px; }
+@media (max-width: 760px) { .song-page { grid-template-columns: 1fr; gap: 18px; padding-top: 16px; } .song-page .cover { max-width: 220px; } }
+.song-page .cover { border-radius: 16px; }
+
+.choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 18px; }
+.choice { position: relative; }
+.choice input { position: absolute; opacity: 0; pointer-events: none; }
+.choice span {
+  display: inline-flex; align-items: center; min-height: 42px; padding: 0 16px; border-radius: 999px;
+  border: 1px solid rgb(var(--fb-border)); cursor: pointer; font-weight: 600; font-size: 15px;
+}
+.choice input:checked + span { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.choice input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 12px; }
+@media (max-width: 420px) { .modes { grid-template-columns: 1fr; } }
+
+table.board { width: 100%; border-collapse: collapse; font-size: 15px; }
+table.board th, table.board td { text-align: left; padding: 9px 6px; border-bottom: 1px solid rgb(var(--fb-border)); }
+table.board th { font-size: 13px; color: rgb(var(--fb-textDim)); font-weight: 600; }
+table.board td.num, table.board th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.board tr.me td { font-weight: 700; }
+.rank1 { color: rgb(var(--fb-gold)); font-weight: 700; }
+
+/* ── Leaderboards ──────────────────────────────────────────────────────── */
+
+.boards { display: grid; gap: 10px; padding-bottom: 40px; }
+.board-row {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: center;
+  padding: 10px; border-radius: 14px; text-decoration: none;
+  background: rgb(var(--fb-card)); border: 1px solid rgb(var(--fb-border));
+}
+.board-row img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: rgb(var(--fb-cardMuted)); }
+.board-row .top-score { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── Settings ──────────────────────────────────────────────────────────── */
+
+.settings { display: grid; gap: 14px; max-width: 640px; padding: 24px 0 48px; }
+.setting { display: grid; gap: 6px; }
+.setting label { font-weight: 650; }
+.setting .row { display: flex; gap: 12px; align-items: center; }
+.setting input[type="range"] { flex: 1; accent-color: var(--accent); min-height: 32px; }
+.setting output { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── Play screen (always dark, like a stage) ───────────────────────────── */
+
+#play { position: fixed; inset: 0; z-index: 20; background: #090a0f; color: #f2f2f5; color-scheme: dark; }
+#play[hidden] { display: none; }
+#stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+.play-ui { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); }
+.pause-btn { width: 52px; height: 52px; border-radius: 14px; background: rgba(255, 255, 255, 0.08); color: #f2f2f5; }
+.pause-btn:hover { background: rgba(255, 255, 255, 0.16); }
+
+.overlay {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
+  background: rgba(6, 7, 10, 0.72);
+}
+.overlay[hidden] { display: none; }
+.panel {
+  width: min(440px, 100%); max-height: calc(100% - 16px); overflow: auto;
+  background: #16171d; border: 1px solid #2c2e38; border-radius: 18px; padding: 22px;
+  display: grid; gap: 12px;
+}
+.panel h2 { margin: 0; }
+.panel .dim { color: #a5a7b4; }
+.panel .btn { background: #20222a; border-color: #343743; color: #f2f2f5; }
+.panel .btn.primary { background: #f2f2f5; color: #111; }
+.panel input[type="text"] { background: #0e0f13; border-color: #343743; }
+.panel .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.panel .stat { background: #0e0f13; border-radius: 12px; padding: 10px 12px; }
+.panel .stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+.panel .big { font-size: 44px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.panel .sections { display: flex; flex-wrap: wrap; gap: 6px; }
+.panel .sections .btn { min-height: 38px; padding: 0 12px; font-size: 14px; }
+.panel table.board th, .panel table.board td { border-color: #2c2e38; }
+.panel .row { display: flex; gap: 10px; }
+.panel .row > * { flex: 1; }
+.spinner {
+  width: 34px; height: 34px; border-radius: 50%; border: 3px solid #343743; border-top-color: #f2f2f5;
+  animation: spin 0.8s linear infinite; margin: 0 auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }

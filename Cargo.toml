@@ -7,7 +7,14 @@ description = "Public, play-only rhythm game server with per-song leaderboards (
 repository = "https://github.com/Imdabossou/RiffBoard"
 publish = false
 
+[workspace]
+members = [".", "crates/core", "crates/game"]
+# `cargo build` / `cargo test` at the root skip the wasm-only game crate;
+# scripts/build-game.sh builds it.
+default-members = [".", "crates/core"]
+
 [dependencies]
+riffboard-core = { path = "crates/core" }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "ws"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs", "time", "signal", "sync"] }
 tower = { version = "0.5", default-features = false, features = ["util"] }
@@ -40,3 +47,12 @@ panic = "abort"
 
 [profile.dev.package."*"]
 opt-level = 1
+
+# The browser game: small and fast (scripts/build-game.sh).
+[profile.wasm]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

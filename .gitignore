@@ -51,3 +51,6 @@ Thumbs.db
 
 # Rust build output
 /target
+
+# Browser game build output (scripts/build-game.sh)
+/static/game/pkg/

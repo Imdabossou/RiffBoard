@@ -267,6 +267,18 @@ async fn only_listed_routes_are_reachable() {
             "{path}"
         );
     }
+    // The game page is locked down with a CSP that still allows WebAssembly.
+    let r = c.get(format!("{}/", srv.base)).send().await.unwrap();
+    let csp = r.headers()["content-security-policy"]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        csp.contains("script-src 'self' 'wasm-unsafe-eval'"),
+        "{csp}"
+    );
+    assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
+    assert!(r.text().await.unwrap().contains("/static/game/app.js"));
     // Audio supports range requests (seeking).
     let r = c
         .get(format!(
