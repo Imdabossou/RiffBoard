@@ -115,6 +115,25 @@ impl Game {
         self.renderer.draw(&s.batches, &vp, w, h, fog);
     }
 
+    /// Song time to jump to for a click at CSS pixel (x, y) on a canvas of
+    /// CSS width `css_w`: the start of the section clicked on the navigator.
+    /// NaN when the point isn't on the navigator.
+    pub fn nav_seek(&self, x: f64, y: f64, css_w: f64, dpr: f64) -> f64 {
+        let Some(s) = &self.state else {
+            return f64::NAN;
+        };
+        let d = dpr as f32;
+        crate::scene::nav_seek(
+            &s.chart,
+            s.end(),
+            (css_w * dpr) as f32,
+            d,
+            x as f32 * d,
+            y as f32 * d,
+        )
+        .unwrap_or(f64::NAN)
+    }
+
     /// [hits, misses, streak, best_streak, score, accuracy].
     pub fn tally(&self) -> Vec<f64> {
         let Some(s) = &self.state else {

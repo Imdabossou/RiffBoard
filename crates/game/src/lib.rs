@@ -176,10 +176,21 @@ impl State {
                 judged: tally.hits + tally.misses,
                 mic: self.detector.as_ref().map(|d| d.level),
                 progress: (t / end).clamp(0.0, 1.0) as f32,
+                end,
             },
             section,
         };
         scene::build(&frame, &self.opts, &self.font, &mut self.batches)
+    }
+}
+
+impl State {
+    /// Song length the HUD uses (same as in `build`).
+    pub fn end(&self) -> f64 {
+        self.chart
+            .duration
+            .max(self.chart.last_event_time())
+            .max(1.0)
     }
 }
 

@@ -14,7 +14,7 @@ RiffBoard started as a fork of [fee[dB]ack](https://github.com/got-feedback/feed
 
 - **A real game engine in the browser.** The note highway is a Rust game compiled to WebAssembly (about 110 KB gzipped) with its own WebGL2 renderer. Every frame is a handful of batched draw calls with no garbage collection, and the song clock comes from the audio hardware, so notes glide smoothly on phones and 120 Hz screens alike.
 - **Note detection that knows the song.** The microphone is judged against the notes that are due: the right pitch, freshly played, around the right time. A wrong fret counts as a miss and a note still ringing from earlier doesn't count twice. Audio never leaves the visitor's device.
-- **Score and practice modes.** *Play for score* judges the whole song from start to finish, with no skipping. *Practice* plays without judging, and you can restart or jump to any section from the pause menu.
+- **Score and practice modes.** *Play for score* judges the whole song from start to finish, with no skipping. *Practice* plays without judging; click any section on the navigator along the top to jump there, or restart from the pause menu.
 - **Leaderboards.** Every song part has its own board for score runs. Each name keeps its best score.
 - **No accounts.** Visitors type a name when they post a score. Settings live in their own browser.
 - **Made to be played on anything.** Phones in portrait or landscape, laptops and big screens, left-handed mode, lowest string at the top or bottom, adjustable note speed, mic delay and picture offset.

@@ -96,6 +96,8 @@ pub struct Hud {
     /// Mic level relative to the gate (None = mic off).
     pub mic: Option<f32>,
     pub progress: f32,
+    /// Song length used for the progress bar and section navigator.
+    pub end: f64,
 }
 
 #[derive(Default)]
@@ -424,14 +426,20 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
 
     // Strings at the hit line; a string lights up while a note on it is due.
     let mut due = [false; 8];
-    let n0 = ch.notes.partition_point(|n| n.time < f.t - 0.12);
+    // (Look back far enough to catch long sustains still ringing.)
+    let rings = |time: f64, sus: f64| time - 0.12 <= f.t && f.t <= time + sus.max(0.12);
+    let n0 = ch.notes.partition_point(|n| n.time < f.t - 12.0);
     for n in ch.notes[n0..].iter().take_while(|n| n.time <= f.t + 0.12) {
-        due[n.string.min(7)] = true;
+        if rings(n.time, n.sustain) {
+            due[n.string.min(7)] = true;
+        }
     }
-    let c0 = ch.chords.partition_point(|c| c.time < f.t - 0.12);
+    let c0 = ch.chords.partition_point(|c| c.time < f.t - 12.0);
     for c in ch.chords[c0..].iter().take_while(|c| c.time <= f.t + 0.12) {
         for n in &c.notes {
-            due[n.string.min(7)] = true;
+            if rings(c.time, n.sustain) {
+                due[n.string.min(7)] = true;
+            }
         }
     }
     for (s, lit) in due.iter().enumerate().take(strings) {
@@ -461,7 +469,8 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
         if c.time + sus < lo_t {
             continue;
         }
-        let z = z_of(c.time);
+        let held = sus > 0.05 && c.time < f.t && f.t <= c.time + sus && res != Some(false);
+        let z = if held { 0.0 } else { z_of(c.time) };
         for n in &c.notes {
             draw_note(
                 out,
@@ -476,7 +485,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
                 false,
             );
         }
-        if c.time >= f.t - 0.05 || res.is_none() {
+        if held || c.time >= f.t - 0.05 || res.is_none() {
             // Chord frame around the strings it uses.
             let fretted = c.notes.iter().filter(|n| n.fret > 0).map(|n| n.fret);
             let (mn, mx) = fretted.fold((i32::MAX, i32::MIN), |(a, b), x| (a.min(x), b.max(x)));
@@ -485,7 +494,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
             } else {
                 (mn as f32 - 1.0, mx as f32)
             };
-            let fade = fade(f.t, c.time);
+            let fade = if held { 1.0 } else { fade(f.t, c.time) };
             let col = rgba(
                 if res == Some(false) {
                     [0.4, 0.4, 0.45]
@@ -690,14 +699,28 @@ fn draw_note(
         }
     }
 
-    // Once hit, the gem is gone (the burst replaces it).
-    if hit && past {
+    // A sustained note stays on the hit line, lit, until it ends.
+    let held = n.sustain > 0.05 && past && f.t <= n.time + n.sustain && !missed;
+    let (z, a) = if held {
+        (0.0, 1.0)
+    } else if past {
+        // Passed without a hit: fade out just past the line instead of
+        // flying on towards the camera over the fret numbers.
+        let k = (1.0 - (f.t - n.time - n.sustain.max(0.0)) / 0.15).clamp(0.0, 1.0) as f32;
+        (z.min(0.5), a.min(1.0) * k)
+    } else {
+        (z, a)
+    };
+    // Once hit, a short note is gone (the burst replaces it).
+    if hit && past && !held {
         return;
     }
-    if past && n.time < f.t - TAIL_S {
+    if past && !held && n.time + n.sustain.max(0.0) < f.t - TAIL_S {
         return;
     }
-    let glow = if (n.time - f.t).abs() < 0.08 && !missed {
+    let glow = if held {
+        0.55 + 0.15 * ((f.t * 12.0).sin() as f32)
+    } else if (n.time - f.t).abs() < 0.08 && !missed {
         0.6
     } else {
         0.08
@@ -813,6 +836,30 @@ impl Num {
     }
 }
 
+/// Where the section navigator sits, in drawing-buffer pixels: (x, y, w, h).
+pub fn nav_rect(width: f32, dpr: f32) -> (f32, f32, f32, f32) {
+    let d = dpr.max(1.0);
+    let m = 12.0 * d;
+    (m, 8.0 * d, (width - 2.0 * m).max(1.0), 26.0 * d)
+}
+
+/// Song time to jump to for a click at drawing-buffer pixel (x, y) on the
+/// navigator: the start of the section under it. `None` if not on the bar.
+pub fn nav_seek(chart: &Chart, end: f64, width: f32, dpr: f32, x: f32, y: f32) -> Option<f64> {
+    let (nx, ny, nw, nh) = nav_rect(width, dpr);
+    // A little extra height so it is easy to hit on a touch screen.
+    if chart.sections.is_empty() || x < nx || x > nx + nw || y < 0.0 || y > ny + nh + 6.0 * dpr {
+        return None;
+    }
+    let t = ((x - nx) / nw) as f64 * end.max(1.0);
+    let i = chart.sections.partition_point(|s| s.time <= t);
+    Some(if i <= 1 {
+        0.0
+    } else {
+        chart.sections[i - 1].time
+    })
+}
+
 fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
     let d = f.dpr.max(1.0);
     let m = 16.0 * d;
@@ -822,30 +869,82 @@ fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
     let white = [1.0, 1.0, 1.0, 0.95];
     let dim = [0.75, 0.77, 0.85, 0.9];
 
-    // Progress along the very top.
-    hud_rect(
-        &mut out.hud,
-        0.0,
-        0.0,
-        f.width,
-        4.0 * d,
-        [1.0, 1.0, 1.0, 0.12],
-    );
-    hud_rect(
-        &mut out.hud,
-        0.0,
-        0.0,
-        f.width * h.progress.clamp(0.0, 1.0),
-        4.0 * d,
-        [1.0, 1.0, 1.0, 0.6],
-    );
+    // Section navigator (or a plain progress bar when there are no sections).
+    let (nx, ny, nw, nh) = nav_rect(f.width, f.dpr);
+    let secs = &f.chart.sections;
+    let end = h.end.max(1.0);
+    let px = |t: f64| nx + nw * (t / end).clamp(0.0, 1.0) as f32;
+    let top = if secs.is_empty() {
+        hud_rect(
+            &mut out.hud,
+            0.0,
+            0.0,
+            f.width,
+            4.0 * d,
+            [1.0, 1.0, 1.0, 0.12],
+        );
+        hud_rect(
+            &mut out.hud,
+            0.0,
+            0.0,
+            f.width * h.progress.clamp(0.0, 1.0),
+            4.0 * d,
+            [1.0, 1.0, 1.0, 0.6],
+        );
+        m
+    } else {
+        hud_rect(&mut out.hud, nx, ny, nw, nh, [1.0, 1.0, 1.0, 0.07]);
+        let cur = secs.partition_point(|x| x.time <= f.t).saturating_sub(1);
+        let label_h = (nh * 0.55).min(14.0 * d);
+        for (i, sec) in secs.iter().enumerate() {
+            let x0 = if i == 0 { nx } else { px(sec.time) };
+            let x1 = secs.get(i + 1).map_or(nx + nw, |n| px(n.time));
+            if i == cur {
+                hud_rect(&mut out.hud, x0, ny, x1 - x0, nh, [1.0, 1.0, 1.0, 0.13]);
+            }
+            if i > 0 {
+                hud_rect(
+                    &mut out.hud,
+                    x0 - 0.75 * d,
+                    ny,
+                    1.5 * d,
+                    nh,
+                    [0.0, 0.0, 0.0, 0.55],
+                );
+            }
+            if !sec.name.is_empty() && text_width(font, &sec.name, label_h) < x1 - x0 - 8.0 * d {
+                let col = if i == cur { white } else { dim };
+                push_text(
+                    &mut out.hud,
+                    font,
+                    &sec.name,
+                    [(x0 + x1) / 2.0, ny + nh / 2.0, 0.0],
+                    label_h,
+                    col,
+                    Align::Centre,
+                    true,
+                );
+            }
+        }
+        let p = px(f.t.max(0.0));
+        hud_rect(
+            &mut out.hud,
+            nx,
+            ny + nh - 3.0 * d,
+            p - nx,
+            3.0 * d,
+            [1.0, 1.0, 1.0, 0.55],
+        );
+        hud_rect(&mut out.hud, p - d, ny, 2.0 * d, nh, [1.0, 1.0, 1.0, 0.95]);
+        ny + nh + 8.0 * d
+    };
 
     let score = Num::new(h.score, b"");
     push_text(
         &mut out.hud,
         font,
         score.as_str(),
-        [m, m + big * 0.6, 0.0],
+        [m, top + big * 0.6, 0.0],
         big,
         white,
         Align::Left,
@@ -857,7 +956,7 @@ fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
             &mut out.hud,
             font,
             acc.as_str(),
-            [m, m + big * 1.25 + small * 0.4, 0.0],
+            [m, top + big * 1.25 + small * 0.4, 0.0],
             small,
             dim,
             Align::Left,
@@ -870,22 +969,10 @@ fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
             &mut out.hud,
             font,
             s.as_str(),
-            [f.width - m, m + big * 0.6, 0.0],
+            [f.width - m, top + big * 0.6, 0.0],
             small * 1.1,
             white,
             Align::Right,
-            true,
-        );
-    }
-    if !f.section.is_empty() {
-        push_text(
-            &mut out.hud,
-            font,
-            f.section,
-            [f.width / 2.0, m + small * 0.6, 0.0],
-            small,
-            dim,
-            Align::Centre,
             true,
         );
     }
@@ -1075,6 +1162,33 @@ mod tests {
         let i10 = 9; // labels 1..9 are one glyph each; "10" starts after them
         assert!(ta[i10] < ta[i10 + 1]);
         assert!(tb[i10] < tb[i10 + 1]);
+    }
+
+    #[test]
+    fn navigator_jumps_to_section_starts() {
+        let mut c = chart();
+        c.sections = vec![
+            riffboard_core::chart::Section {
+                time: 0.0,
+                name: "Intro".into(),
+            },
+            riffboard_core::chart::Section {
+                time: 10.0,
+                name: "Verse".into(),
+            },
+            riffboard_core::chart::Section {
+                time: 30.0,
+                name: "Chorus".into(),
+            },
+        ];
+        let (nx, ny, nw, _) = nav_rect(1000.0, 1.0);
+        let at = |c: &Chart, frac: f32| nav_seek(c, 40.0, 1000.0, 1.0, nx + nw * frac, ny + 5.0);
+        assert_eq!(at(&c, 0.1), Some(0.0));
+        assert_eq!(at(&c, 0.5), Some(10.0)); // t = 20 s, inside the verse
+        assert_eq!(at(&c, 0.9), Some(30.0));
+        assert_eq!(nav_seek(&c, 40.0, 1000.0, 1.0, 500.0, 300.0), None);
+        c.sections.clear();
+        assert_eq!(at(&c, 0.5), None);
     }
 
     #[test]

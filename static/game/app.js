@@ -369,6 +369,26 @@ overlay.addEventListener('click', (e) => {
 });
 
 $('#pause-btn').addEventListener('click', pausePlay);
+
+// Section navigator (drawn by the game along the top): in practice, a click
+// jumps to the start of that section, with a second of run-up.
+const stageEl = $('#stage');
+const navTime = (e) => {
+  const s = session;
+  if (!s || !s.game || s.mode !== 'practice' || s.ended) return NaN;
+  return s.game.nav_seek(e.offsetX, e.offsetY, s.cssW, s.dpr);
+};
+stageEl.addEventListener('pointerdown', (e) => {
+  const t = navTime(e);
+  if (Number.isNaN(t)) return;
+  e.preventDefault();
+  session.seek(Math.max(-1, t - 1));
+});
+let navCursor = false;
+stageEl.addEventListener('pointermove', (e) => {
+  const on = !Number.isNaN(navTime(e));
+  if (on !== navCursor) { navCursor = on; stageEl.style.cursor = on ? 'pointer' : ''; }
+});
 document.addEventListener('keydown', (e) => {
   if (!session || e.target.closest('input, textarea, select')) return;
   if (e.key === ' ' || e.key === 'Escape' || e.key === 'p') {
