@@ -126,6 +126,15 @@ export class Session {
     this.game.set_lefty(!!this.opts.lefty);
     this.game.set_sensitivity(this.opts.sensitivity);
 
+    if (this.opts.backdropUrl) {
+      try {
+        const img = new Image();
+        img.src = this.opts.backdropUrl;
+        await img.decode();
+        this.game.set_backdrop(img);
+      } catch { /* no backdrop: plain dark stage */ }
+    }
+
     this.ctx = new AudioContext({ latencyHint: 'interactive' });
     this.clock = new Clock(this.ctx);
     let stems = this.info.stems.filter((s) => s.default);

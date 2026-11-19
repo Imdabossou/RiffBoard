@@ -54,6 +54,22 @@ pub struct Section {
     pub name: String,
 }
 
+/// One sung word (or syllable). `text` already ends with a space unless the
+/// next syllable joins on.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LyricWord {
+    pub time: f64,
+    pub dur: f64,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LyricLine {
+    pub start: f64,
+    pub end: f64,
+    pub words: Vec<LyricWord>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct Stem {
@@ -94,6 +110,57 @@ pub struct Chart {
     pub chord_names: Vec<String>,
     pub notes: Vec<Note>,
     pub chords: Vec<Chord>,
+    pub lyrics: Vec<LyricLine>,
+}
+
+/// Groups lyric events into lines: a word ending in `+` ends its line, as
+/// does a pause of more than three seconds. A trailing `-` joins the next
+/// syllable without a space.
+fn lyric_lines(events: &[Value]) -> Vec<LyricLine> {
+    let mut words: Vec<(f64, f64, String)> = events
+        .iter()
+        .filter_map(|v| {
+            let w = v.get("w").and_then(Value::as_str)?;
+            Some((f(v, "t"), f(v, "d").max(0.0), w.chars().take(60).collect()))
+        })
+        .collect();
+    words.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut lines: Vec<LyricLine> = Vec::new();
+    let mut cur: Vec<LyricWord> = Vec::new();
+    let flush = |cur: &mut Vec<LyricWord>, lines: &mut Vec<LyricLine>| {
+        if let (Some(a), Some(b)) = (cur.first(), cur.last()) {
+            lines.push(LyricLine {
+                start: a.time,
+                end: b.time + b.dur,
+                words: std::mem::take(cur),
+            });
+        }
+    };
+    for (t, d, w) in words {
+        if let Some(last) = cur.last()
+            && t - (last.time + last.dur) > 3.0
+        {
+            flush(&mut cur, &mut lines);
+        }
+        let end_line = w.ends_with('+');
+        let w = w.trim_end_matches('+');
+        let text = match w.strip_suffix('-') {
+            Some(stem) => stem.to_string(),
+            None => format!("{w} "),
+        };
+        if !text.trim().is_empty() {
+            cur.push(LyricWord {
+                time: t,
+                dur: d,
+                text,
+            });
+        }
+        if end_line || cur.len() >= 12 {
+            flush(&mut cur, &mut lines);
+        }
+    }
+    flush(&mut cur, &mut lines);
+    lines
 }
 
 fn f(v: &Value, k: &str) -> f64 {
@@ -214,6 +281,7 @@ impl Chart {
                     let n = s(v, "displayName");
                     if n.is_empty() { s(v, "name") } else { n }
                 })),
+                "lyrics" => c.lyrics = lyric_lines(data(m)),
                 "notes" => c.notes.extend(data(m).iter().map(|v| note(v, 0.0))),
                 "chords" => c.chords.extend(data(m).iter().map(|v| {
                     let t = f(v, "t");
@@ -340,6 +408,26 @@ mod tests {
         assert_eq!(c.beats[1].measure, None);
         // Drop D open E string is D1 (26).
         assert_eq!(c.midi(&c.notes[1]), 26);
+    }
+
+    #[test]
+    fn lyrics_become_lines() {
+        let c = Chart::from_messages(&[json!({"type": "lyrics", "data": [
+            {"t": 1, "d": 0.4, "w": "Hel-"}, {"t": 1.4, "d": 0.4, "w": "lo+"},
+            {"t": 2, "d": 0.5, "w": "big"}, {"t": 2.5, "d": 0.5, "w": "world"},
+            {"t": 9, "d": 0.5, "w": "later"}]})]);
+        assert_eq!(c.lyrics.len(), 3);
+        assert_eq!(
+            c.lyrics[0]
+                .words
+                .iter()
+                .map(|w| w.text.as_str())
+                .collect::<String>(),
+            "Hello "
+        );
+        assert_eq!(c.lyrics[1].words.len(), 2);
+        assert_eq!(c.lyrics[1].end, 3.0);
+        assert_eq!(c.lyrics[2].start, 9.0);
     }
 
     #[test]

@@ -33,11 +33,14 @@ pub struct State {
     pub batches: Batches,
     pub font: Font,
     sensitivity: f32,
+    /// Notes per second of each section, scaled 0..1.
+    density: Vec<f32>,
 }
 
 impl State {
     pub fn new(chart: Chart) -> State {
         let judge = Judge::new(&chart);
+        let density = section_density(&chart);
         let a = chart.anchor_at(0.0);
         State {
             note_res: vec![None; chart.notes.len()],
@@ -52,6 +55,7 @@ impl State {
             batches: Batches::default(),
             font: Font::default(),
             sensitivity: 0.5,
+            density,
         }
     }
 
@@ -179,6 +183,7 @@ impl State {
                 end,
             },
             section,
+            density: &self.density,
         };
         scene::build(&frame, &self.opts, &self.font, &mut self.batches)
     }
@@ -192,6 +197,33 @@ impl State {
             .max(self.chart.last_event_time())
             .max(1.0)
     }
+}
+
+/// Notes (and chords) per second of each section, scaled so the busiest is 1.
+fn section_density(chart: &Chart) -> Vec<f32> {
+    let secs = &chart.sections;
+    let end = chart.duration.max(chart.last_event_time());
+    let mut times: Vec<f64> = chart
+        .notes
+        .iter()
+        .map(|n| n.time)
+        .chain(chart.chords.iter().map(|c| c.time))
+        .collect();
+    times.sort_by(f64::total_cmp);
+    let raw: Vec<f32> = secs
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let a = if i == 0 { 0.0 } else { s.time };
+            let b = secs.get(i + 1).map_or(end, |n| n.time);
+            let count = times.partition_point(|t| *t < b) - times.partition_point(|t| *t < a);
+            (count as f64 / (b - a).max(1.0)) as f32
+        })
+        .collect();
+    let max = raw.iter().copied().fold(0.0, f32::max);
+    raw.iter()
+        .map(|r| if max > 0.0 { r / max } else { 0.0 })
+        .collect()
 }
 
 #[allow(clippy::too_many_arguments)]

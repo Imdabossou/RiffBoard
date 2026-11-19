@@ -29,7 +29,7 @@ async function getJSON(url, opts) {
 
 const DEFAULTS = {
   speed: 11, lowStringBottom: false, lefty: false, sensitivity: 0.6, visualOffsetMs: 0, micOffsetMs: 0,
-  quality: 'auto', micDeviceId: '', name: '',
+  quality: 'auto', micDeviceId: '', name: '', backdrop: true,
 };
 
 function loadSettings() {
@@ -231,7 +231,8 @@ async function startPlay(filename, arr, mode, song) {
   if (session) return;
   playEl.hidden = false;
   document.body.style.overflow = 'hidden';
-  const s = new Session($('#stage'), settings);
+  const backdropUrl = settings.backdrop ? (site.hero_image || '/static/brand/hero.png') : '';
+  const s = new Session($('#stage'), { ...settings, backdropUrl });
   session = s;
   s.mode = mode;
   s.filename = filename;
@@ -432,6 +433,8 @@ async function settingsPage() {
     ${range('sens', 'Detection leniency', 0, 1, 0.05, settings.sensitivity, (v) => `${Math.round(v * 100)}%`, 'Higher accepts quieter or less clean notes; lower is stricter about the right fret.')}
     ${range('mic-off', 'Microphone delay', -150, 150, 5, settings.micOffsetMs, (v) => `${v} ms`, 'If correct notes count as late, raise this; if they count as early, lower it.')}
     ${range('vis-off', 'Picture offset', -100, 100, 5, settings.visualOffsetMs, (v) => `${v} ms`, 'Moves the notes against the audio, for screens that lag.')}
+    <div class="setting card"><label for="backdrop">Backdrop</label>
+      <select id="backdrop"><option value="on">Band artwork behind the highway</option><option value="off">Plain dark</option></select></div>
     <div class="setting card"><label for="quality">Graphics</label>
       <select id="quality"><option value="auto">Automatic</option><option value="sharp">Sharpest</option><option value="fast">Fastest (lower resolution)</option></select></div>
     <div class="setting card"><label for="mic">Microphone</label>
@@ -442,6 +445,8 @@ async function settingsPage() {
   $('#hand').value = settings.lefty ? 'left' : 'right';
   $('#hand').addEventListener('change', (e) => { settings.lefty = e.target.value === 'left'; saveSettings(settings); });
   $('#quality').value = settings.quality;
+  $('#backdrop').value = settings.backdrop ? 'on' : 'off';
+  $('#backdrop').addEventListener('change', (e) => { settings.backdrop = e.target.value === 'on'; saveSettings(settings); });
   const bind = (id, key, conv) => {
     const el = $(`#${id}`);
     el.addEventListener('input', () => {

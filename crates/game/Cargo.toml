@@ -18,7 +18,7 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = [
     "HtmlCanvasElement", "WebGl2RenderingContext", "WebGlProgram", "WebGlShader",
     "WebGlBuffer", "WebGlVertexArrayObject", "WebGlUniformLocation", "WebGlTexture",
-    "CanvasRenderingContext2d", "CanvasGradient", "Document", "Window", "Element", "TextMetrics",
+    "CanvasRenderingContext2d", "CanvasGradient", "Document", "Window", "Element", "TextMetrics", "HtmlImageElement",
 ] }
 
 [package.metadata.wasm-pack.profile.release]

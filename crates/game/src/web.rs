@@ -52,6 +52,11 @@ impl Game {
         Ok(summary.to_string())
     }
 
+    /// Shows `img` (loaded, same-origin) blurred and darkened behind the highway.
+    pub fn set_backdrop(&mut self, img: &web_sys::HtmlImageElement) -> Result<(), JsValue> {
+        self.renderer.set_backdrop(img)
+    }
+
     /// Note speed (world units per second; 11 is the default).
     pub fn set_speed(&mut self, speed: f32) {
         if let Some(s) = &mut self.state {
@@ -110,8 +115,8 @@ impl Game {
         };
         let vp = s.build(t, w as f32, h as f32, dpr as f32);
         let speed = s.opts.speed;
-        // Fog over the last third of the visible stretch.
-        let fog = [speed * 3.2 * 0.6, speed * 3.2 * 1.02];
+        // Fade over the far 40% of the visible stretch.
+        let fog = [speed * 3.2 * 0.55, speed * 3.2 * 0.98];
         self.renderer.draw(&s.batches, &vp, w, h, fog);
     }
 

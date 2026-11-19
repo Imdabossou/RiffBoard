@@ -129,6 +129,8 @@ pub struct Frame<'a> {
     pub effects: &'a [Effect],
     pub hud: Hud,
     pub section: &'a str,
+    /// Notes per second of each section, scaled 0..1 (for the navigator).
+    pub density: &'a [f32],
 }
 
 pub fn fret_x(fret: f32) -> f32 {
@@ -271,24 +273,21 @@ fn scale(c: [f32; 3], k: f32) -> [f32; 3] {
 /// Camera for a frame. Returns (view-projection, eye).
 pub fn camera(cam_x: f32, width: f32, height: f32, strings: usize) -> (Mat4, [f32; 3]) {
     let aspect = (width / height.max(1.0)).max(0.3);
-    // Narrow (portrait) screens pull the camera back so a playable fret
-    // window still fits across.
+    // Looking down the neck: the strings at the hit line run big across the
+    // bottom fifth of the screen and the highway narrows to a point about
+    // two thirds up. Six- to eight-string parts sit a little further back.
+    // Narrow (portrait) screens move back along the same line of sight and
+    // look down more steeply, so a playable fret window still fits.
+    let k = (strings as f32 - 4.0).max(0.0);
     let pull = (1.2 / aspect).max(1.0).powf(0.25);
-    let top = STRING_BASE + strings as f32 * STRING_GAP;
-    // Framed so the strings sit in the lower fifth of the screen and the
-    // far end of the highway around three quarters up. Narrow screens move
-    // the camera back along the same line of sight, so the framing holds.
-    // Tall screens look down more steeply from higher up, so the highway
-    // runs up the extra height instead of leaving it empty.
     let tall = (1.0 / aspect - 1.0).clamp(0.0, 1.2);
-    let target = [cam_x, 0.0, -7.0 - 4.0 * tall];
-    let eye = [
-        cam_x,
-        (top + 3.25) * pull * (1.0 + 0.7 * tall),
-        -7.0 + 13.0 * pull,
-    ];
+    let top_string = STRING_BASE + (strings.max(1) - 1) as f32 * STRING_GAP;
+    let target = [cam_x, 0.0, -11.0 - k - 4.0 * tall];
+    let eye_y = (top_string + 2.0 + 0.4 * k) * pull * (1.0 + 0.9 * tall);
+    let eye_z = target[2] + (6.5 + 0.25 * k - target[2]) * pull;
+    let eye = [cam_x, eye_y, eye_z];
     let view = math::look_at(eye, target, [0.0, 1.0, 0.0]);
-    let proj = math::perspective(0.9, aspect, 0.1, 120.0);
+    let proj = math::perspective(0.7 + 0.05 * k, aspect, 0.1, 150.0);
     (math::mul(&proj, &view), eye)
 }
 
@@ -331,12 +330,14 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
     let board_w = FRETS as f32 + 1.0;
     let top = STRING_BASE + (strings - 1) as f32 * STRING_GAP;
 
-    // Board, and the lit fret window of the current anchor.
+    // Board (slightly see-through, so a backdrop shows faintly beneath it;
+    // first in the blended list, so it sits under every note), and the lit
+    // fret window of the current anchor.
     push_box(
-        &mut out.opaque,
+        &mut out.clear,
         [board_w / 2.0 - 0.5, -0.06, mid_z],
         [board_w + 1.0, 0.1, depth],
-        rgba([0.07, 0.075, 0.1], 1.0),
+        rgba([0.06, 0.065, 0.09], 0.86),
         0.0,
     );
     let anchor = ch.anchor_at(f.t.max(0.0));
@@ -366,6 +367,25 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
             0.0,
         );
     }
+    // Upright fret wires on the fretboard at the hit line; the current fret
+    // window's wires are lit, so it is easy to see where a note lands.
+    let top_string = STRING_BASE + (strings - 1) as f32 * STRING_GAP;
+    let wire_h = top_string + 0.12;
+    for fr in 0..=FRETS {
+        let inside = (fr as f32) >= lo && (fr as f32) <= lo + aw;
+        let (c, a, g) = if inside {
+            ([0.9, 0.8, 0.55], 0.9, 0.3)
+        } else {
+            ([0.32, 0.34, 0.42], 0.55, 0.0)
+        };
+        push_box(
+            &mut out.opaque,
+            [fret_x(fr as f32), wire_h / 2.0, -0.03],
+            [0.028, wire_h, 0.028],
+            rgba(c, a),
+            g,
+        );
+    }
     for fr in [3, 5, 7, 9, 12, 15, 17, 19, 21, 24] {
         let x = note_x(fr);
         let n = if fr % 12 == 0 { 2 } else { 1 };
@@ -389,7 +409,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
             &mut out.text,
             font,
             fret_label(fr),
-            [note_x(fr), 0.28, 0.75],
+            [note_x(fr), 0.16, 0.3],
             0.4,
             [0.85, 0.87, 0.95, a],
             Align::Centre,
@@ -415,14 +435,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
         );
     }
 
-    // Hit line.
-    push_box(
-        &mut out.opaque,
-        [board_w / 2.0 - 0.5, 0.02, 0.0],
-        [board_w, 0.03, 0.07],
-        rgba([0.85, 0.87, 0.95], 1.0),
-        0.4,
-    );
+    // (The strings and upright fret wires mark the hit line.)
 
     // Strings at the hit line; a string lights up while a note on it is due.
     let mut due = [false; 8];
@@ -699,6 +712,22 @@ fn draw_note(
         }
     }
 
+    // Landing marker: a ring on the string where the note will land,
+    // growing brighter as it approaches.
+    let ahead = n.time - f.t;
+    if n.fret > 0 && ahead > 0.0 && ahead < 1.2 && res.is_none() {
+        let k = (1.0 - ahead / 1.2) as f32;
+        let s = 0.75 - 0.25 * k;
+        push_glyph(
+            &mut out.text,
+            [note_x(n.fret), y, 0.06],
+            [s, s],
+            CELL_RING,
+            rgba(base, 0.25 + 0.6 * k),
+            false,
+        );
+    }
+
     // A sustained note stays on the hit line, lit, until it ends.
     let held = n.sustain > 0.05 && past && f.t <= n.time + n.sustain && !missed;
     let (z, a) = if held {
@@ -840,7 +869,7 @@ impl Num {
 pub fn nav_rect(width: f32, dpr: f32) -> (f32, f32, f32, f32) {
     let d = dpr.max(1.0);
     let m = 12.0 * d;
-    (m, 8.0 * d, (width - 2.0 * m).max(1.0), 26.0 * d)
+    (m, 8.0 * d, (width - 2.0 * m).max(1.0), 34.0 * d)
 }
 
 /// Song time to jump to for a click at drawing-buffer pixel (x, y) on the
@@ -893,32 +922,47 @@ fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
         );
         m
     } else {
-        hud_rect(&mut out.hud, nx, ny, nw, nh, [1.0, 1.0, 1.0, 0.07]);
+        hud_rect(&mut out.hud, nx, ny, nw, nh, [1.0, 1.0, 1.0, 0.05]);
         let cur = secs.partition_point(|x| x.time <= f.t).saturating_sub(1);
-        let label_h = (nh * 0.55).min(14.0 * d);
+        let label_h = (nh * 0.38).min(13.0 * d);
         for (i, sec) in secs.iter().enumerate() {
             let x0 = if i == 0 { nx } else { px(sec.time) };
             let x1 = secs.get(i + 1).map_or(nx + nw, |n| px(n.time));
-            if i == cur {
-                hud_rect(&mut out.hud, x0, ny, x1 - x0, nh, [1.0, 1.0, 1.0, 0.13]);
-            }
-            if i > 0 {
-                hud_rect(
-                    &mut out.hud,
-                    x0 - 0.75 * d,
-                    ny,
-                    1.5 * d,
-                    nh,
-                    [0.0, 0.0, 0.0, 0.55],
-                );
-            }
+            // Bar height shows how busy the section is.
+            let busy = f.density.get(i).copied().unwrap_or(0.5);
+            let bh = nh * (0.22 + 0.78 * busy);
+            let played = secs.get(i + 1).is_some_and(|n| n.time <= f.t);
+            let a = if i == cur {
+                0.55
+            } else if played {
+                0.16
+            } else {
+                0.28
+            };
+            hud_rect(
+                &mut out.hud,
+                x0 + d,
+                ny + nh - bh,
+                (x1 - x0 - 2.0 * d).max(1.0),
+                bh,
+                [1.0, 1.0, 1.0, a],
+            );
             if !sec.name.is_empty() && text_width(font, &sec.name, label_h) < x1 - x0 - 8.0 * d {
-                let col = if i == cur { white } else { dim };
+                let col = if i == cur {
+                    [0.05, 0.05, 0.08, 0.95]
+                } else {
+                    dim
+                };
+                let ly = if bh > label_h * 1.3 {
+                    ny + nh - label_h * 0.65
+                } else {
+                    ny + nh - bh - label_h * 0.6
+                };
                 push_text(
                     &mut out.hud,
                     font,
                     &sec.name,
-                    [(x0 + x1) / 2.0, ny + nh / 2.0, 0.0],
+                    [(x0 + x1) / 2.0, ly, 0.0],
                     label_h,
                     col,
                     Align::Centre,
@@ -939,29 +983,32 @@ fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
         ny + nh + 8.0 * d
     };
 
+    // Score, accuracy and streak in the top-right corner.
     let score = Num::new(h.score, b"");
     push_text(
         &mut out.hud,
         font,
         score.as_str(),
-        [m, top + big * 0.6, 0.0],
+        [f.width - m, top + big * 0.6, 0.0],
         big,
         white,
-        Align::Left,
+        Align::Right,
         true,
     );
+    let mut row = top + big * 1.25 + small * 0.4;
     if h.judged > 0 {
         let acc = Num::new((h.accuracy * 100.0).round() as i64, b"%");
         push_text(
             &mut out.hud,
             font,
             acc.as_str(),
-            [m, top + big * 1.25 + small * 0.4, 0.0],
+            [f.width - m, row, 0.0],
             small,
             dim,
-            Align::Left,
+            Align::Right,
             true,
         );
+        row += small * 1.2;
     }
     if h.streak >= 2 {
         let s = Num::new(h.streak, b" streak");
@@ -969,13 +1016,63 @@ fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
             &mut out.hud,
             font,
             s.as_str(),
-            [f.width - m, top + big * 0.6, 0.0],
-            small * 1.1,
+            [f.width - m, row, 0.0],
+            small,
             white,
             Align::Right,
             true,
         );
     }
+
+    // Lyrics in the top-left: the current line (sung words lit) and the next.
+    let lines = &f.chart.lyrics;
+    let li = lines
+        .partition_point(|l| l.start <= f.t + 0.6)
+        .saturating_sub(1);
+    if let Some(line) = lines
+        .get(li)
+        .filter(|l| l.start <= f.t + 0.6 && f.t <= l.end + 1.2)
+    {
+        let base = big * 0.8;
+        let max_w = f.width * 0.55;
+        let mut y = top + base * 0.6;
+        for (k, l) in [Some(line), lines.get(li + 1)]
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            let w: f32 = l
+                .words
+                .iter()
+                .map(|w| text_width(font, &w.text, base))
+                .sum();
+            let hh = if w > max_w { base * max_w / w } else { base };
+            let mut x = m;
+            for word in &l.words {
+                let lit = k == 0 && word.time <= f.t;
+                let col = if lit {
+                    [1.0, 0.86, 0.45, 1.0]
+                } else if k == 0 {
+                    white
+                } else {
+                    [0.75, 0.77, 0.85, 0.55]
+                };
+                push_text(
+                    &mut out.hud,
+                    font,
+                    &word.text,
+                    [x, y, 0.0],
+                    hh,
+                    col,
+                    Align::Left,
+                    true,
+                );
+                x += text_width(font, &word.text, hh);
+            }
+            y += hh * 1.15;
+        }
+    }
+
     // Mic level meter (bottom-left), so players can see they are heard.
     if let Some(level) = h.mic {
         let w = 90.0 * d;
@@ -1068,6 +1165,7 @@ mod tests {
             effects: &[],
             hud: Hud::default(),
             section: "Intro",
+            density: &[],
         };
         build(&f, &Options::default(), &Font::default(), &mut out);
         assert_eq!(out.opaque.len() % BOX_FLOATS, 0);
@@ -1106,6 +1204,7 @@ mod tests {
                     ..Hud::default()
                 },
                 section: "Verse",
+                density: &[],
             };
             build(&f, &Options::default(), &Font::default(), &mut out);
             if k == 100 {
@@ -1138,6 +1237,7 @@ mod tests {
             effects: &[],
             hud: Hud::default(),
             section: "",
+            density: &[],
         };
         let font = Font::default();
         let mut a = Batches::default();

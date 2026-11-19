@@ -12,7 +12,10 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
 - **New game engine.** The player is now a Rust game compiled to WebAssembly (about 110 KB gzipped), with its own WebGL2 renderer. The highway is drawn in four batched draw calls a frame with nothing allocated per frame, and the song clock comes from the audio output, so playback is smooth: in testing, no dropped frames at 60 Hz even with the CPU slowed 20 times.
 - **New note detector**, written in Rust and shared with the server's rules. It checks the microphone for the expected pitch around each note's time: a wrong fret is a miss, and a note still ringing from earlier doesn't count again. A leniency slider sets how strict it is.
 - **New, much smaller site.** Song library, song page with its leaderboard, leaderboards, and settings, in plain HTML. The band's branding, About card and links carry over. Settings: note speed, left-handed mode, string order, detection leniency, microphone delay, picture offset, graphics quality and microphone choice.
-- A section navigator runs along the top of the game, showing every section, the current one and a playhead. In practice, click a section to jump to it.
+- The highway is viewed down the neck: the strings run big across the bottom, with upright fret wires that light up across the current fret window, a ring on each string where the next note will land, and fret numbers underneath.
+- A section navigator runs along the top of the game: every section as a bar whose height shows how busy it is, the current one highlighted, and a playhead. In practice, click a section to jump to it.
+- Lyrics show in the top-left corner (current line with sung words lit, and the next line). The score moved to the top-right.
+- The band's artwork (the site's hero image, or RiffBoard's own when unbranded) sits blurred and darkened behind the highway, which fades into it. It can be turned off in Settings.
 - Held notes stay on the fretboard, lit, until their sustain ends; notes that pass unplayed fade out at the line.
 - Score runs may be paused (they still can't skip or slow down). Practice runs can restart and jump to any section from the pause menu.
 - The leaderboard rules (score formula and run checks) now live in `crates/core`, used by both the server and the game.
@@ -20,7 +23,7 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
 ### Removed
 
 - The inherited fee[dB]ack frontend (about 58,000 lines of JavaScript), its plugins (3D highway, note detection, tuner, input setup) and the endpoints only they used: `/api/settings`, `/api/tunings`, `/api/plugins*`, `/api/library/stats|albums|artists|genres|tuning-names|providers*`, `/api/work/*`, `/api/startup-status*`, `/api/scan-status`. This also removes the code behind the open CodeQL alerts in the old highway.
-- Not yet carried over from the old player: lyrics, loops, playback speed, difficulty levels and the tuner.
+- Not yet carried over from the old player: loops, playback speed, difficulty levels and the tuner.
 
 ### Security
 

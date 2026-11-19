@@ -47,8 +47,9 @@ void main() {
     vec3 l = normalize(vec3(0.25, 0.85, 0.55));
     float d = max(dot(v_nrm, l), 0.0);
     vec3 c = v_color.rgb * (0.42 + 0.58 * d) + v_color.rgb * v_glow;
+    // Far away, things darken a little and fade out into the backdrop.
     float f = smoothstep(u_fog.x, u_fog.y, v_depth);
-    o = vec4(mix(c, u_fog_color, f), v_color.a);
+    o = vec4(mix(c, u_fog_color, f * 0.5), v_color.a * (1.0 - f));
 }"#;
 
 const GLYPH_VS: &str = r#"#version 300 es
@@ -91,6 +92,29 @@ void main() {
     float a = texture(u_tex, v_uv).a;
     float f = smoothstep(u_fog.x, u_fog.y, v_depth);
     o = vec4(v_color.rgb, v_color.a * a * (1.0 - f));
+}"#;
+
+/// Backdrop: one full-screen triangle, cover-fitted, darkened, vignetted.
+const BG_VS: &str = r#"#version 300 es
+out vec2 v_uv;
+void main() {
+    vec2 p = vec2(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0);
+    v_uv = vec2(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);
+    gl_Position = vec4(p, 0.0, 1.0);
+}"#;
+
+const BG_FS: &str = r#"#version 300 es
+precision mediump float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform vec2 u_scale;
+uniform vec3 u_base;
+out vec4 o;
+void main() {
+    vec3 c = texture(u_tex, (v_uv - 0.5) * u_scale + 0.5).rgb;
+    vec2 q = v_uv - vec2(0.5, 0.42);
+    float vig = 1.0 - smoothstep(0.25, 0.85, length(q));
+    o = vec4(mix(u_base, c * 0.42, 0.35 + 0.65 * vig), 1.0);
 }"#;
 
 /// Unit cube: 36 vertices of position(3) + normal(3).
@@ -194,6 +218,13 @@ pub struct Renderer {
     hud: Layer,
     _atlas: WebGlTexture,
     pub font: Font,
+    bg_prog: WebGlProgram,
+    bg_vao: WebGlVertexArrayObject,
+    u_bg_tex: Option<WebGlUniformLocation>,
+    u_bg_scale: Option<WebGlUniformLocation>,
+    u_bg_base: Option<WebGlUniformLocation>,
+    /// The backdrop texture and its aspect ratio, once one is set.
+    backdrop: Option<(WebGlTexture, f32)>,
 }
 
 impl Renderer {
@@ -276,6 +307,8 @@ impl Renderer {
         };
 
         let (atlas, font) = make_atlas(&gl)?;
+        let bg_prog = compile(&gl, BG_VS, BG_FS)?;
+        let bg_vao = gl.create_vertex_array().ok_or("no vao")?;
         let u = |p: &WebGlProgram, n: &str| gl.get_uniform_location(p, n);
         Ok(Renderer {
             u_box_vp: u(&box_prog, "u_vp"),
@@ -292,6 +325,12 @@ impl Renderer {
             box_prog,
             glyph_prog,
             _atlas: atlas,
+            u_bg_tex: u(&bg_prog, "u_tex"),
+            u_bg_scale: u(&bg_prog, "u_scale"),
+            u_bg_base: u(&bg_prog, "u_base"),
+            bg_prog,
+            bg_vao,
+            backdrop: None,
             font,
             gl,
             canvas,
@@ -315,6 +354,27 @@ impl Renderer {
         gl.viewport(0, 0, w as i32, h as i32);
         gl.clear_color(BG[0], BG[1], BG[2], 1.0);
         gl.clear(GL::COLOR_BUFFER_BIT | GL::DEPTH_BUFFER_BIT);
+        if let Some((tex, img_aspect)) = &self.backdrop {
+            // Cover-fit: crop the image's long side to the screen's shape.
+            let screen = w as f32 / h.max(1) as f32;
+            let scale = if screen > *img_aspect {
+                [1.0, img_aspect / screen]
+            } else {
+                [screen / img_aspect, 1.0]
+            };
+            gl.disable(GL::DEPTH_TEST);
+            gl.depth_mask(false);
+            gl.use_program(Some(&self.bg_prog));
+            gl.active_texture(GL::TEXTURE1);
+            gl.bind_texture(GL::TEXTURE_2D, Some(tex));
+            gl.uniform1i(self.u_bg_tex.as_ref(), 1);
+            gl.uniform2f(self.u_bg_scale.as_ref(), scale[0], scale[1]);
+            gl.uniform3f(self.u_bg_base.as_ref(), BG[0], BG[1], BG[2]);
+            gl.bind_vertex_array(Some(&self.bg_vao));
+            gl.draw_arrays(GL::TRIANGLES, 0, 3);
+            gl.active_texture(GL::TEXTURE0);
+            gl.depth_mask(true);
+        }
         gl.enable(GL::DEPTH_TEST);
         gl.depth_func(GL::LEQUAL);
 
@@ -327,7 +387,9 @@ impl Renderer {
         gl.uniform_matrix4fv_with_f32_array(self.u_box_vp.as_ref(), false, vp);
         gl.uniform2f(self.u_box_fog.as_ref(), fog[0], fog[1]);
         gl.uniform3f(self.u_box_fog_color.as_ref(), BG[0], BG[1], BG[2]);
-        gl.disable(GL::BLEND);
+        // Blended too, so the far end of the highway can fade out.
+        gl.enable(GL::BLEND);
+        gl.blend_func(GL::SRC_ALPHA, GL::ONE_MINUS_SRC_ALPHA);
         gl.depth_mask(true);
         gl.bind_vertex_array(Some(&self.opaque.vao));
         gl.draw_arrays_instanced(GL::TRIANGLES, 0, 36, (b.opaque.len() / BOX_FLOATS) as i32);
@@ -353,6 +415,64 @@ impl Renderer {
         gl.draw_arrays_instanced(GL::TRIANGLES, 0, 6, (b.hud.len() / GLYPH_FLOATS) as i32);
         gl.bind_vertex_array(None);
         gl.depth_mask(true);
+    }
+}
+
+impl Renderer {
+    /// Sets the backdrop from an image: drawn once, small and blurred, into a
+    /// texture, so it costs one texture read per pixel per frame and no more.
+    pub fn set_backdrop(&mut self, img: &web_sys::HtmlImageElement) -> Result<(), JsValue> {
+        let (iw, ih) = (img.natural_width(), img.natural_height());
+        if iw == 0 || ih == 0 {
+            return Err("the backdrop image is empty".into());
+        }
+        let aspect = iw as f32 / ih as f32;
+        let (cw, ch) = if aspect >= 1.0 {
+            (256, (256.0 / aspect) as u32)
+        } else {
+            ((256.0 * aspect) as u32, 256)
+        };
+        let doc = web_sys::window()
+            .ok_or("no window")?
+            .document()
+            .ok_or("no document")?;
+        let canvas: HtmlCanvasElement = doc.create_element("canvas")?.dyn_into()?;
+        canvas.set_width(cw.max(1));
+        canvas.set_height(ch.max(1));
+        let ctx: CanvasRenderingContext2d = canvas.get_context("2d")?.ok_or("no 2d")?.dyn_into()?;
+        // Browsers without canvas filters still get a soft image from the
+        // small size and linear upscaling.
+        ctx.set_filter("blur(5px) saturate(1.15)");
+        ctx.draw_image_with_html_image_element_and_dw_and_dh(
+            img,
+            -8.0,
+            -8.0,
+            cw as f64 + 16.0,
+            ch as f64 + 16.0,
+        )?;
+        let gl = &self.gl;
+        let tex = gl.create_texture().ok_or("no texture")?;
+        gl.active_texture(GL::TEXTURE1);
+        gl.bind_texture(GL::TEXTURE_2D, Some(&tex));
+        gl.tex_image_2d_with_u32_and_u32_and_html_canvas_element(
+            GL::TEXTURE_2D,
+            0,
+            GL::RGBA as i32,
+            GL::RGBA,
+            GL::UNSIGNED_BYTE,
+            &canvas,
+        )?;
+        for (k, v) in [
+            (GL::TEXTURE_MIN_FILTER, GL::LINEAR),
+            (GL::TEXTURE_MAG_FILTER, GL::LINEAR),
+            (GL::TEXTURE_WRAP_S, GL::CLAMP_TO_EDGE),
+            (GL::TEXTURE_WRAP_T, GL::CLAMP_TO_EDGE),
+        ] {
+            gl.tex_parameteri(GL::TEXTURE_2D, k, v as i32);
+        }
+        gl.active_texture(GL::TEXTURE0);
+        self.backdrop = Some((tex, aspect));
+        Ok(())
     }
 }
 
