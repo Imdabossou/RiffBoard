@@ -147,17 +147,31 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible, 
 .notice { padding: 12px 14px; border-radius: 12px; background: rgb(var(--fb-cardMuted)); font-size: 14px; }
 .error { color: #d33; }
 
+.foot { padding: 24px 16px 32px; border-top: 1px solid rgb(var(--fb-border)); margin-top: 24px; }
+
 /* ── Library ───────────────────────────────────────────────────────────── */
 
 .hero { position: relative; padding: 36px 0 24px; }
-.hero.has-image { padding: 72px 0 32px; }
+.hero.has-image { padding: 72px 0 40px; }
 .hero-bg {
   position: absolute; inset: 0 calc(50% - 50vw); background-size: cover; background-position: center;
   opacity: 0.22; z-index: -1; mask-image: linear-gradient(to bottom, #000 40%, transparent);
 }
 .hero p { max-width: 640px; margin: 0; }
 
-.search { margin: 8px 0 20px; max-width: 420px; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px !important; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 8px 0 32px; }
+.steps .card { padding: 16px 18px; }
+.steps b {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+  background: rgb(var(--fb-cardMuted)); font-size: 15px; margin-bottom: 10px;
+}
+.steps h2 { font-size: 17px; margin: 0 0 4px; }
+.steps p { margin: 0; font-size: 15px; }
+@media (max-width: 760px) { .steps { grid-template-columns: 1fr; } }
+#songs { scroll-margin-top: 80px; }
+
+.search { margin: 0 0 20px; max-width: 420px; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; padding-bottom: 40px; }
 @media (max-width: 480px) { .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; } }
@@ -171,6 +185,11 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, a:focus-visible, 
 .song .meta { padding: 10px 12px 12px; }
 .song .title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .song .sub { font-size: 14px; color: rgb(var(--fb-textDim)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.about { margin: 0 0 40px; }
+.about p { margin: 0 0 10px; max-width: 70ch; }
+.about .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.about .links .btn { min-height: 40px; }
 
 /* ── Song page ─────────────────────────────────────────────────────────── */
 

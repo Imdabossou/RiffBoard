@@ -98,7 +98,6 @@ async fn start(tag: &str) -> Server {
         .env("DLC_DIR", &library)
         .env("CONFIG_DIR", &config.0)
         .env("STATIC_DIR", root().join("static"))
-        .env("PLUGINS_DIR", root().join("plugins"))
         .env("HOST", "127.0.0.1")
         .env("PORT", port.to_string())
         .env("LOG_LEVEL", "warn")
@@ -160,13 +159,8 @@ async fn matches_the_python_server() {
         &std::fs::read_to_string(root().join("tests/golden/golden.json")).unwrap(),
     )
     .unwrap();
-    // Not comparable: the capture skipped plugin loading / runs at another
-    // version / caught the scanner mid-flight.
-    let skip = [
-        "GET /api/plugins",
-        "GET /api/version",
-        "GET /api/scan-status",
-    ];
+    // Not comparable: the capture ran at another version.
+    let skip = ["GET /api/version"];
     let mut failures = Vec::new();
     for (key, expected) in &golden {
         if skip.contains(&key.as_str()) {
@@ -228,6 +222,15 @@ async fn only_listed_routes_are_reachable() {
         ),
         ("GET", "/api/plugins/..%2F..%2Fsrc/screen.js"),
         ("GET", "/api/plugins/nope/screen.js"),
+        // The old frontend's endpoints are gone.
+        ("GET", "/api/plugins"),
+        ("GET", "/api/settings"),
+        ("GET", "/api/tunings"),
+        ("GET", "/api/library/stats"),
+        ("GET", "/api/library/artists"),
+        ("GET", "/api/startup-status"),
+        ("GET", "/api/scan-status"),
+        ("GET", "/static/v3/index.html"),
     ] {
         let r = c
             .request(method.parse().unwrap(), format!("{}{path}", srv.base))
@@ -249,12 +252,15 @@ async fn only_listed_routes_are_reachable() {
             .unwrap()
             .contains("microphone=(self)")
     );
-    // Static files and plugins are served.
+    // The game client and its files are served.
     for path in [
         "/",
-        "/static/v3/index.html",
-        "/api/plugins/tuner/screen.js",
-        "/api/plugins/note_detect/settings.html",
+        "/favicon.ico",
+        "/static/game/index.html",
+        "/static/game/app.js",
+        "/static/game/player.js",
+        "/static/game/mic-worklet.js",
+        "/static/fonts/rubik.css",
     ] {
         assert_eq!(
             c.get(format!("{}{path}", srv.base))

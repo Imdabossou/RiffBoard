@@ -22,6 +22,11 @@ fn main() {
             .map(|b| f32::from_le_bytes(*b))
             .collect()
     };
+    if let Ok(path) = std::env::var("RB_SYNTH_OUT") {
+        // Save the rendered audio (raw f32 mono, 48 kHz) for browser tests.
+        let bytes: Vec<u8> = samples.iter().flat_map(|x| x.to_le_bytes()).collect();
+        std::fs::write(path, bytes).expect("write");
+    }
     let offset: f64 = a.get(3).and_then(|s| s.parse().ok()).unwrap_or(0.0);
     let level: f32 = a.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.5);
     // Optional: judge against the chart shifted by this many semitones

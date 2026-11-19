@@ -7,6 +7,23 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
 
 ## [Unreleased]
 
+### Changed
+
+- **New game engine.** The player is now a Rust game compiled to WebAssembly (about 110 KB gzipped), with its own WebGL2 renderer. The highway is drawn in four batched draw calls a frame with nothing allocated per frame, and the song clock comes from the audio output, so playback is smooth: in testing, no dropped frames at 60 Hz even with the CPU slowed 20 times.
+- **New note detector**, written in Rust and shared with the server's rules. It checks the microphone for the expected pitch around each note's time: a wrong fret is a miss, and a note still ringing from earlier doesn't count again. A leniency slider sets how strict it is.
+- **New, much smaller site.** Song library, song page with its leaderboard, leaderboards, and settings, in plain HTML. The band's branding, About card and links carry over. Settings: note speed, left-handed mode, string order, detection leniency, microphone delay, picture offset, graphics quality and microphone choice.
+- Score runs may be paused (they still can't skip or slow down). Practice runs can restart and jump to any section from the pause menu.
+- The leaderboard rules (score formula and run checks) now live in `crates/core`, used by both the server and the game.
+
+### Removed
+
+- The inherited fee[dB]ack frontend (about 58,000 lines of JavaScript), its plugins (3D highway, note detection, tuner, input setup) and the endpoints only they used: `/api/settings`, `/api/tunings`, `/api/plugins*`, `/api/library/stats|albums|artists|genres|tuning-names|providers*`, `/api/work/*`, `/api/startup-status*`, `/api/scan-status`. This also removes the code behind the open CodeQL alerts in the old highway.
+- Not yet carried over from the old player: lyrics, loops, playback speed, difficulty levels and the tuner.
+
+### Security
+
+- The game page sends a strict Content-Security-Policy (same-origin only, no inline scripts, no framing).
+
 ## [0.3.0] - 2026-11-04
 
 ### Changed

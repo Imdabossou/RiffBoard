@@ -23,7 +23,6 @@ use crate::config::Config;
 use crate::library::{self, Filters, Index};
 use crate::pack::{self, UnpackCache};
 use crate::store::{self, Store};
-use crate::tunings;
 use crate::util::{self, num, round_to};
 use crate::util_url::quote_component;
 
@@ -38,7 +37,6 @@ pub struct AppState {
     pub cache: UnpackCache,
     pub store: Store,
     pub admin_token: String,
-    pub plugins: Value,
     charts: Mutex<VecDeque<ChartEntry>>,
     runs: Mutex<HashMap<String, Run>>,
     start_limiter: RateLimiter,
@@ -100,7 +98,7 @@ const MAX_RUNS_TOTAL: usize = 5000;
 const CHART_CACHE: usize = 12;
 
 impl AppState {
-    pub fn new(cfg: Config, store: Store, admin_token: String, plugins: Value) -> Self {
+    pub fn new(cfg: Config, store: Store, admin_token: String) -> Self {
         let cache = UnpackCache::new(cfg.config_dir.join("sloppak_cache"), cfg.cache_bytes);
         Self {
             cfg,
@@ -108,7 +106,6 @@ impl AppState {
             cache,
             store,
             admin_token,
-            plugins,
             charts: Mutex::default(),
             runs: Mutex::default(),
             start_limiter: RateLimiter::new(40, 600),
@@ -194,42 +191,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/site.css", get(site_css))
         .route("/site/{name}", get(site_asset))
-        .route(
-            "/api/scan-status",
-            get(|State(s): S| async move { Json(s.index.status()) }),
-        )
-        .route(
-            "/api/startup-status",
-            get(|| async { Json(startup_status()) }),
-        )
-        .route("/api/startup-status/stream", get(startup_stream))
-        .route("/api/settings", get(settings))
-        .route("/api/tunings", get(tunings_route))
         .route("/api/library", get(library_page))
-        .route("/api/library/stats", get(library_stats))
-        .route("/api/library/albums", get(library_albums))
-        .route("/api/library/artists", get(library_artists))
-        .route(
-            "/api/library/genres",
-            get(|State(s): S| async move { Json(library::genres(&s.index.all())) }),
-        )
-        .route("/api/library/tuning-names", get(tuning_names))
-        .route(
-            "/api/library/providers",
-            get(|| async { Json(library::providers()) }),
-        )
-        .route(
-            "/api/library/providers/{id}/songs/{*rest}",
-            get(provider_art),
-        )
-        .route("/api/work/{*rest}", get(work_charts))
         .route("/api/song/{*rest}", get(song))
         .route("/api/sloppak/{*rest}", get(sloppak_file))
-        .route(
-            "/api/plugins",
-            get(|State(s): S| async move { Json(s.plugins.clone()) }),
-        )
-        .route("/api/plugins/{id}/{*rest}", get(plugin_file))
         .route("/ws/highway/{*filename}", get(highway_ws))
         .route("/api/runs", post(start_run))
         .route("/api/scores", post(submit_score))
@@ -283,7 +247,7 @@ async fn index(State(s): S, req: Request) -> Response {
 }
 
 async fn favicon(State(s): S, req: Request) -> Response {
-    serve_file(s.cfg.static_dir.join("v3/brand/favicon-32.png"), req).await
+    serve_file(s.cfg.static_dir.join("brand/favicon-32.png"), req).await
 }
 
 async fn static_file(State(s): S, req: Request) -> Response {
@@ -339,40 +303,6 @@ async fn version(State(s): S) -> Json<Value> {
     )
 }
 
-fn startup_status() -> Value {
-    json!({"running": false, "phase": "complete", "message": "Startup complete",
-           "current_plugin": "", "loaded": 0, "total": 0, "error": null})
-}
-
-async fn startup_stream() -> Response {
-    let body = format!("data: {}\n\n", startup_status());
-    (
-        [
-            (header::CONTENT_TYPE, "text/event-stream"),
-            (header::CACHE_CONTROL, "no-cache"),
-        ],
-        body,
-    )
-        .into_response()
-}
-
-async fn settings(State(s): S, Query(q): Query<HashMap<String, String>>) -> Response {
-    match crate::settings::compute(&s.operator_config(), q.get("state"), q.get("patch")) {
-        Ok(v) => Json(v).into_response(),
-        Err(e) => err(StatusCode::BAD_REQUEST, &e),
-    }
-}
-
-async fn tunings_route(State(s): S) -> Json<Value> {
-    let cfg = s.operator_config();
-    let rp = cfg
-        .get("reference_pitch")
-        .and_then(Value::as_f64)
-        .filter(|r| (430.0..=450.0).contains(r))
-        .unwrap_or(tunings::DEFAULT_REFERENCE_PITCH);
-    Json(tunings::tunings_payload(rp))
-}
-
 // ── Library ──────────────────────────────────────────────────────────────────
 
 fn qnum(q: &HashMap<String, String>, k: &str, default: usize) -> usize {
@@ -415,81 +345,7 @@ async fn library_page(State(s): S, Query(q): Query<HashMap<String, String>>) -> 
     .into_response()
 }
 
-async fn library_stats(State(s): S, Query(q): Query<HashMap<String, String>>) -> Response {
-    if let Err(r) = provider_ok(&q) {
-        return *r;
-    }
-    let f = Filters::from_query(&q);
-    let want = q.get("sort_letters").is_some_and(|v| v != "0");
-    let group = q.get("group").is_some_and(|g| g != "0" && !g.is_empty());
-    let sort = q.get("sort").map_or("artist", String::as_str);
-    Json(library::query_stats(&s.index.all(), &f, sort, want, group)).into_response()
-}
-
-async fn library_albums(State(s): S, Query(q): Query<HashMap<String, String>>) -> Response {
-    if let Err(r) = provider_ok(&q) {
-        return *r;
-    }
-    let f = Filters::from_query(&q);
-    Json(library::query_albums(
-        &s.index.all(),
-        &f,
-        qnum(&q, "page", 0),
-        qnum(&q, "size", 120).min(500),
-    ))
-    .into_response()
-}
-
-async fn library_artists(State(s): S, Query(q): Query<HashMap<String, String>>) -> Response {
-    if let Err(r) = provider_ok(&q) {
-        return *r;
-    }
-    let f = Filters::from_query(&q);
-    let letter = q.get("letter").cloned().unwrap_or_default();
-    Json(library::query_artists(
-        &s.index.all(),
-        &f,
-        &letter,
-        qnum(&q, "page", 0),
-        qnum(&q, "size", 50).min(200),
-    ))
-    .into_response()
-}
-
-async fn tuning_names(State(s): S, Query(q): Query<HashMap<String, String>>) -> Response {
-    if let Err(r) = provider_ok(&q) {
-        return *r;
-    }
-    let p = tunings::perspective(q.get("instrument").map_or("guitar-lead", String::as_str));
-    Json(library::tuning_names(&s.index.all(), &p)).into_response()
-}
-
-async fn work_charts(State(s): S, Path(rest): Path<String>) -> Response {
-    match rest.strip_suffix("/charts") {
-        Some(key) => Json(library::work_charts(&s.index.all(), key)).into_response(),
-        None => err(StatusCode::NOT_FOUND, "not found"),
-    }
-}
-
 // ── Songs ────────────────────────────────────────────────────────────────────
-
-async fn provider_art(
-    State(s): S,
-    Path((id, rest)): Path<(String, String)>,
-    headers: HeaderMap,
-) -> Response {
-    if id != "local" {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(json!({"detail": format!("Unknown library provider: {id}")})),
-        )
-            .into_response();
-    }
-    match rest.strip_suffix("/art") {
-        Some(f) => art(&s, f, &headers),
-        None => err(StatusCode::NOT_FOUND, "not found"),
-    }
-}
 
 async fn song(
     State(s): S,
@@ -619,39 +475,6 @@ async fn sloppak_file(State(s): S, Path(rest): Path<String>, req: Request) -> Re
 }
 
 // ── Plugins ──────────────────────────────────────────────────────────────────
-
-async fn plugin_file(
-    State(s): S,
-    Path((id, rest)): Path<(String, String)>,
-    req: Request,
-) -> Response {
-    let known = s
-        .plugins
-        .as_array()
-        .is_some_and(|ps| ps.iter().any(|p| p["id"] == id.as_str()));
-    let Some(root) = known
-        .then(|| pack::resolve_in(&s.cfg.plugins_dir, &id))
-        .flatten()
-    else {
-        return err(StatusCode::NOT_FOUND, "not found");
-    };
-    let rel = match rest.as_str() {
-        "screen.js" | "screen.html" | "settings.html" => rest.clone(),
-        r if r.starts_with("assets/") || r.starts_with("src/") => r.to_string(),
-        r if id == "tuner"
-            && ["utils/", "workers/", "visualization/", "viz-assets/"]
-                .iter()
-                .any(|d| r.starts_with(d)) =>
-        {
-            r.to_string()
-        }
-        _ => return err(StatusCode::NOT_FOUND, "not found"),
-    };
-    match pack::resolve_in(&root, &rel).filter(|p| p.is_file()) {
-        Some(p) => no_cache(serve_file(p, req).await),
-        None => err(StatusCode::NOT_FOUND, "not found"),
-    }
-}
 
 // ── Highway WebSocket ────────────────────────────────────────────────────────
 

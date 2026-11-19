@@ -10,7 +10,6 @@ mod config;
 mod guard;
 mod library;
 mod pack;
-mod settings;
 mod site;
 mod store;
 mod tunings;
@@ -20,8 +19,6 @@ mod web;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
-
-use serde_json::Value;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -64,18 +61,11 @@ async fn serve() {
     });
     let token = util::random_token(32);
     store::write_private(&cfg.config_dir.join("admin.token"), &format!("{token}\n"));
-    let plugins: Value = std::fs::read_to_string(cfg.plugins_dir.join("registry.json"))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_else(|| {
-            tracing::warn!("plugins/registry.json missing or invalid: no plugins loaded");
-            Value::Array(vec![])
-        });
     let addr: SocketAddr = format!("{}:{}", cfg.host, cfg.port)
         .parse()
         .unwrap_or_else(|_| ([0, 0, 0, 0], cfg.port).into());
     let rescan_every = std::time::Duration::from_secs(cfg.rescan_secs);
-    let state = Arc::new(web::AppState::new(cfg, store, token, plugins));
+    let state = Arc::new(web::AppState::new(cfg, store, token));
 
     let st = state.clone();
     tokio::task::spawn_blocking(move || st.rescan()).await.ok();

@@ -4,6 +4,8 @@
 //! list is cleared and refilled in place each frame: no allocation once the
 //! vectors have grown to their working size.
 
+use std::cell::Cell;
+
 use riffboard_core::chart::{Chart, Note};
 
 use crate::math::{self, Mat4};
@@ -50,6 +52,8 @@ pub struct Options {
     pub speed: f32,
     /// Draw the lowest string at the bottom instead of the top.
     pub low_string_bottom: bool,
+    /// Left-handed: mirror the highway (frets run right to left).
+    pub lefty: bool,
 }
 
 impl Default for Options {
@@ -57,6 +61,7 @@ impl Default for Options {
         Options {
             speed: 11.0,
             low_string_bottom: false,
+            lefty: false,
         }
     }
 }
@@ -222,6 +227,9 @@ fn push_text(
     hud: bool,
 ) {
     let w = text_width(font, s, h);
+    // Mirrored scenes negate every world x afterwards (see `mirror`), so lay
+    // world text out reversed about its centre to keep it readable.
+    let flip = !hud && MIRROR.with(Cell::get);
     let mut x = match align {
         Align::Left => pos[0],
         Align::Centre => pos[0] - w / 2.0,
@@ -231,7 +239,9 @@ fn push_text(
         let g = (b.clamp(32, 127) - 32) as usize;
         let a = font.adv[g] * h;
         if b != b' ' {
-            push_glyph(v, [x + a / 2.0, pos[1], pos[2]], [h, h], g, col, hud);
+            let gx = x + a / 2.0;
+            let gx = if flip { 2.0 * pos[0] - gx } else { gx };
+            push_glyph(v, [gx, pos[1], pos[2]], [h, h], g, col, hud);
         }
         x += a;
     }
@@ -307,7 +317,9 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
     out.clear_all();
     let ch = f.chart;
     let strings = ch.string_count.max(1);
-    let (vp, _eye) = camera(f.cam_x, f.width, f.height, strings);
+    MIRROR.with(|m| m.set(opts.lefty));
+    let cam_x = if opts.lefty { -f.cam_x } else { f.cam_x };
+    let (vp, _eye) = camera(cam_x, f.width, f.height, strings);
     let speed = opts.speed;
     let z_of = |t: f64| -((t - f.t) as f32) * speed;
     let far = z_of(f.t + VIEW_S);
@@ -566,8 +578,28 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
         );
     }
 
+    if opts.lefty {
+        mirror(out);
+    }
     build_hud(f, font, out);
     vp
+}
+
+thread_local! {
+    /// Set while building a mirrored (left-handed) frame.
+    static MIRROR: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Left-handed view: negate x of every world-space instance.
+fn mirror(out: &mut Batches) {
+    for v in [&mut out.opaque, &mut out.clear] {
+        for inst in v.as_chunks_mut::<BOX_FLOATS>().0 {
+            inst[0] = -inst[0];
+        }
+    }
+    for inst in out.text.as_chunks_mut::<GLYPH_FLOATS>().0 {
+        inst[0] = -inst[0];
+    }
 }
 
 fn fade(now: f64, t: f64) -> f32 {
@@ -1000,6 +1032,49 @@ mod tests {
         }
         // Capacity is reached early; later frames reuse it.
         assert!(out.opaque.capacity() == caps.0 && out.hud.capacity() == caps.3);
+    }
+
+    #[test]
+    fn lefty_mirrors_but_keeps_text_order() {
+        let c = chart();
+        let nr = vec![None; c.notes.len()];
+        let cr = vec![None; c.chords.len()];
+        let f = Frame {
+            chart: &c,
+            note_res: &nr,
+            chord_res: &cr,
+            t: 0.9,
+            cam_x: 4.0,
+            width: 1280.0,
+            height: 720.0,
+            dpr: 1.0,
+            effects: &[],
+            hud: Hud::default(),
+            section: "",
+        };
+        let font = Font::default();
+        let mut a = Batches::default();
+        let mut b = Batches::default();
+        build(&f, &Options::default(), &font, &mut a);
+        build(
+            &f,
+            &Options {
+                lefty: true,
+                ..Options::default()
+            },
+            &font,
+            &mut b,
+        );
+        assert_eq!(a.opaque.len(), b.opaque.len());
+        assert_eq!(a.opaque[0], -b.opaque[0]);
+        // "10" (fret label): the '1' stays left of the '0' on screen order,
+        // i.e. its x is still the smaller one after mirroring.
+        let xs = |v: &Vec<f32>| v.chunks(GLYPH_FLOATS).map(|g| g[0]).collect::<Vec<_>>();
+        let (ta, tb) = (xs(&a.text), xs(&b.text));
+        assert_eq!(ta.len(), tb.len());
+        let i10 = 9; // labels 1..9 are one glyph each; "10" starts after them
+        assert!(ta[i10] < ta[i10 + 1]);
+        assert!(tb[i10] < tb[i10 + 1]);
     }
 
     #[test]

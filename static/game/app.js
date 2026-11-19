@@ -28,7 +28,7 @@ async function getJSON(url, opts) {
 // ── Settings (this browser only) ────────────────────────────────────────
 
 const DEFAULTS = {
-  speed: 11, lowStringBottom: false, sensitivity: 0.6, visualOffsetMs: 0, micOffsetMs: 0,
+  speed: 11, lowStringBottom: false, lefty: false, sensitivity: 0.6, visualOffsetMs: 0, micOffsetMs: 0,
   quality: 'auto', micDeviceId: '', name: '',
 };
 
@@ -69,11 +69,16 @@ async function loadSite() {
     $('#brand-name').textContent = site.name;
     document.title = site.name;
   }
-  if (site.logo) {
-    const img = document.createElement('img');
-    img.src = site.logo; img.alt = '';
-    $('#brand').prepend(img);
+  if (site.favicon) {
+    for (const l of document.querySelectorAll('link[rel="icon"]')) l.remove();
+    const l = document.createElement('link');
+    l.rel = 'icon'; l.href = site.favicon;
+    document.head.append(l);
   }
+  const img = document.createElement('img');
+  img.src = site.logo || '/static/brand/riffboard-icon.svg';
+  img.alt = '';
+  $('#brand').prepend(img);
   try {
     const css = await (await fetch('/site.css')).text();
     if (css.includes('--fb-primary')) document.documentElement.classList.add('branded');
@@ -98,16 +103,25 @@ window.addEventListener('hashchange', () => { if (!session) route(); });
 
 let libraryCache = null;
 async function libraryPage() {
-  const heroImg = site.hero_image ? `<div class="hero-bg" style="background-image:url('${esc(site.hero_image)}')"></div>` : '';
+  const hero = site.hero_image || '/static/brand/hero.png';
   view.innerHTML = `
     <div class="wrap">
-      <section class="hero ${site.hero_image ? 'has-image' : ''}">${heroImg}
+      <section class="hero has-image"><div class="hero-bg" style="background-image:url('${esc(hero)}')"></div>
         <h1>${esc(site.hero_title || 'Play along. Top the board.')}</h1>
         <p class="dim">${esc(site.hero_text || 'Pick a song, plug in or use your mic, and play the whole thing to get on its leaderboard.')}</p>
+        <p class="hero-actions"><a class="btn primary" href="#songs" id="start">Start playing</a><a class="btn" href="#/boards">Leaderboards</a></p>
       </section>
+      <section class="steps" aria-label="How it works">
+        <div class="card"><b>1</b><h2>Pick a song</h2><p class="dim">Choose a part: lead, rhythm or bass.</p></div>
+        <div class="card"><b>2</b><h2>Plug in</h2><p class="dim">An audio interface or your phone or laptop mic. Headphones help.</p></div>
+        <div class="card"><b>3</b><h2>Post your score</h2><p class="dim">Play the whole song and put your name on its board.</p></div>
+      </section>
+      <h2 id="songs">Songs</h2>
       <input class="search" type="search" id="q" placeholder="Search songs" aria-label="Search songs">
       <div class="grid" id="grid"><p class="dim">Loading songs...</p></div>
+      ${aboutCard()}
     </div>`;
+  $('#start').addEventListener('click', (e) => { e.preventDefault(); $('#songs').scrollIntoView({ behavior: 'smooth' }); $('#q').focus({ preventScroll: true }); });
   try {
     libraryCache ||= (await getJSON('/api/library?size=100&sort=artist')).songs || [];
   } catch (e) {
@@ -128,6 +142,17 @@ async function libraryPage() {
   $('#q').addEventListener('input', (e) => draw(e.target.value));
   // Warm up the game engine while the visitor browses.
   loadWasm().catch(() => {});
+}
+
+function aboutCard() {
+  const about = site.about || [];
+  const links = site.links || [];
+  if (!about.length && !links.length) return '';
+  return `<section class="card about">
+    <h2>${esc(site.about_title || `About ${site.name || 'us'}`)}</h2>
+    ${about.map((p) => `<p>${esc(p)}</p>`).join('')}
+    ${links.length ? `<p class="links">${links.map((l) => `<a class="btn" href="${esc(l.url)}" rel="noopener noreferrer" target="_blank">${esc(l.label)}</a>`).join('')}</p>` : ''}
+  </section>`;
 }
 
 // ── Song page ───────────────────────────────────────────────────────────
@@ -380,6 +405,8 @@ async function settingsPage() {
     <h1>Settings</h1>
     <p class="dim" style="margin:0">Saved in this browser only.</p>
     ${range('speed', 'Note speed', 6, 22, 1, settings.speed, (v) => `${v}`, 'How fast notes travel down the highway.')}
+    <div class="setting card"><label for="hand">Handedness</label>
+      <select id="hand"><option value="right">Right-handed</option><option value="left">Left-handed (mirrored highway)</option></select></div>
     <div class="setting card"><label for="strings">String order</label>
       <select id="strings"><option value="top">Lowest string at the top</option><option value="bottom">Lowest string at the bottom (like tab)</option></select></div>
     ${range('sens', 'Detection leniency', 0, 1, 0.05, settings.sensitivity, (v) => `${Math.round(v * 100)}%`, 'Higher accepts quieter or less clean notes; lower is stricter about the right fret.')}
@@ -392,6 +419,8 @@ async function settingsPage() {
       <span class="dim small" id="mic-help">The browser shows device names once you have allowed the microphone.</span></div>
   </div></div>`;
   $('#strings').value = settings.lowStringBottom ? 'bottom' : 'top';
+  $('#hand').value = settings.lefty ? 'left' : 'right';
+  $('#hand').addEventListener('change', (e) => { settings.lefty = e.target.value === 'left'; saveSettings(settings); });
   $('#quality').value = settings.quality;
   const bind = (id, key, conv) => {
     const el = $(`#${id}`);
@@ -422,6 +451,18 @@ async function settingsPage() {
   } catch { /* no device list */ }
 }
 
+// Songs without cover art get a plain placeholder instead of a broken image.
+const NO_ART = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#8884"/><path fill="#8888" d="M15 5v9.2a3 3 0 1 1-2-2.8V7h-3V5z"/></svg>')}`;
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  if (img instanceof HTMLImageElement && img.matches('.cover, .board-row img') && img.src !== NO_ART) img.src = NO_ART;
+}, true);
+
 // ── Start ───────────────────────────────────────────────────────────────
+
+// AGPL: every page offers its source code.
+getJSON('/api/version').then((v) => {
+  $('#foot').innerHTML = `RiffBoard ${esc(v.version)} · <a href="${esc(v.source_url)}" rel="noopener">Source code</a> · <a href="${esc(v.license_url)}" rel="noopener">AGPL-3.0 licence</a>`;
+}).catch(() => {});
 
 loadSite().finally(route);

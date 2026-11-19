@@ -123,6 +123,7 @@ export class Session {
     this.info = JSON.parse(this.game.load(JSON.stringify(msgs)));
     this.game.set_speed(this.opts.speed);
     this.game.set_low_string_bottom(!!this.opts.lowStringBottom);
+    this.game.set_lefty(!!this.opts.lefty);
     this.game.set_sensitivity(this.opts.sensitivity);
 
     this.ctx = new AudioContext({ latencyHint: 'interactive' });

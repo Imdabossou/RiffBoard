@@ -27,16 +27,6 @@ fn has_dotdot(path: &str) -> bool {
         || decoded.contains('\0')
 }
 
-fn is_id(s: &str) -> bool {
-    !s.is_empty()
-        && s.chars()
-            .all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c))
-}
-
-fn rest_nonempty(s: Option<&str>) -> bool {
-    s.is_some_and(|x| !x.is_empty() && !x.contains('\0'))
-}
-
 pub fn is_allowed(method: &Method, path: &str) -> bool {
     if has_dotdot(path) || path.contains('\0') {
         return false;
@@ -48,82 +38,25 @@ pub fn is_allowed(method: &Method, path: &str) -> bool {
         return false;
     }
     match path {
-        "/"
-        | "/favicon.ico"
-        | "/robots.txt"
-        | "/api/version"
-        | "/api/startup-status"
-        | "/api/startup-status/stream"
-        | "/api/scan-status"
-        | "/api/settings"
-        | "/api/tunings"
-        | "/api/library"
-        | "/api/library/albums"
-        | "/api/library/artists"
-        | "/api/library/stats"
-        | "/api/library/genres"
-        | "/api/library/tuning-names"
-        | "/api/library/providers"
-        | "/api/plugins"
-        | "/api/leaderboards"
-        | "/api/site"
-        | "/site.css" => return true,
+        "/" | "/favicon.ico" | "/robots.txt" | "/api/version" | "/api/library"
+        | "/api/leaderboards" | "/api/site" | "/site.css" => return true,
         _ => {}
     }
     if let Some(rest) = path.strip_prefix("/site/") {
         return crate::site::is_asset_name(rest);
     }
-    if let Some(rest) = path.strip_prefix("/static/") {
-        return !rest.is_empty();
-    }
-    if let Some(rest) = path.strip_prefix("/ws/highway/") {
-        return !rest.is_empty();
-    }
-    if let Some(rest) = path.strip_prefix("/api/song/") {
-        return !rest.is_empty();
-    }
-    if let Some(rest) = path.strip_prefix("/api/scores/") {
-        return !rest.is_empty();
+    let nonempty = |prefix: &str| path.strip_prefix(prefix).is_some_and(|r| !r.is_empty());
+    if nonempty("/static/")
+        || nonempty("/ws/highway/")
+        || nonempty("/api/song/")
+        || nonempty("/api/scores/")
+    {
+        return true;
     }
     if let Some(rest) = path.strip_prefix("/api/sloppak/") {
         return PACK_SUFFIXES
             .iter()
             .any(|s| rest.contains(&format!("{s}/file/")));
-    }
-    if let Some(rest) = path.strip_prefix("/api/work/") {
-        return rest.ends_with("/charts") && rest.len() > "/charts".len();
-    }
-    if let Some(rest) = path.strip_prefix("/api/library/providers/") {
-        let mut it = rest.splitn(3, '/');
-        let id = it.next().unwrap_or("");
-        return id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "_.:-".contains(c))
-            && !id.is_empty()
-            && it.next() == Some("songs")
-            && it.next().is_some_and(|r| r.ends_with("/art"));
-    }
-    if let Some(rest) = path.strip_prefix("/api/plugins/") {
-        let mut it = rest.splitn(2, '/');
-        let (id, tail) = (it.next().unwrap_or(""), it.next());
-        if !is_id(id) {
-            return false;
-        }
-        return match tail {
-            Some("screen.js" | "screen.html" | "settings.html") => true,
-            Some(t) => {
-                let mut p = t.splitn(2, '/');
-                let (dir, file) = (p.next().unwrap_or(""), p.next());
-                match dir {
-                    "assets" | "src" => rest_nonempty(file),
-                    "utils" | "workers" | "visualization" | "viz-assets" => {
-                        id == "tuner" && file.is_some_and(is_id)
-                    }
-                    _ => false,
-                }
-            }
-            None => false,
-        };
     }
     false
 }
@@ -220,7 +153,8 @@ mod tests {
         let p = Method::POST;
         for (m, path) in [
             (&g, "/"),
-            (&g, "/static/app.js"),
+            (&g, "/static/game/app.js"),
+            (&g, "/static/game/pkg/riffboard_game_bg.wasm"),
             (&g, "/api/library"),
             (&g, "/api/song/A/b.feedpak"),
             (&g, "/api/song/a/b.feedpak/art"),
@@ -230,10 +164,6 @@ mod tests {
             (&p, "/api/runs"),
             (&p, "/api/scores"),
             (&g, "/ws/highway/a/b.feedpak"),
-            (&g, "/api/plugins/tuner/workers/yin.js"),
-            (&g, "/api/plugins/highway_3d/assets/plugin.css"),
-            (&g, "/api/work/a%7Cb/charts"),
-            (&g, "/api/library/providers/remote:x/songs/a/art"),
             (&g, "/api/site"),
             (&g, "/site.css"),
             (&g, "/site/logo.png"),
@@ -254,7 +184,17 @@ mod tests {
             (&g, "/api/song/../../etc/passwd"),
             (&g, "/static/../server.py"),
             (&g, "/api/plugins/x/routes.py"),
-            (&g, "/api/plugins/highway_3d/utils/a.js"),
+            (&g, "/api/plugins/tuner/screen.js"),
+            (&g, "/api/plugins"),
+            (&g, "/api/settings"),
+            (&g, "/api/tunings"),
+            (&g, "/api/library/artists"),
+            (&g, "/api/library/providers/remote:x/songs/a/art"),
+            (&g, "/api/work/a%7Cb/charts"),
+            (&g, "/api/startup-status"),
+            (&g, "/api/scan-status"),
+            (&g, "/static/"),
+            (&g, "/ws/highway/"),
             (&g, "/api/sloppak/a.zip/file/x"),
             (&g, "/api/song/%2E%2E%2Fetc%2Fpasswd"),
             (&g, "/site/site.json"),

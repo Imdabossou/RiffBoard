@@ -22,14 +22,26 @@ jobs:
       - name: Format
         run: cargo fmt --check
       - name: Clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests (unit + end-to-end against the reference responses)
-        run: cargo test --locked
+        run: cargo test --workspace --locked
       - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
           tool: cargo-audit
       - name: Dependency advisories
         run: cargo audit --deny warnings
+
+  game:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup update stable && rustup default stable && rustup component add clippy && rustup target add wasm32-unknown-unknown
+      - name: wasm-bindgen CLI (the version crates/game pins)
+        run: cargo install wasm-bindgen-cli --locked --version "$(sed -n 's/^wasm-bindgen = "=\(.*\)"/\1/p' crates/game/Cargo.toml)"
+      - name: Clippy (wasm)
+        run: cargo clippy -p riffboard-game --target wasm32-unknown-unknown --locked -- -D warnings
+      - name: Build the browser game
+        run: bash scripts/build-game.sh
 
   javascript:
     runs-on: ubuntu-latest
@@ -38,16 +50,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-      - name: Frontend unit tests
-        run: node --test tests/js/*.test.js 'tests/plugins/*/js/*.test.js'
-      - name: Note-detection plugin tests
-        run: node --test plugins/note_detect/test/*.test.js
-      - name: 3D highway plugin tests
-        run: node --test plugins/highway_3d/tests/*.test.js
-      - name: Tailwind stylesheet is up to date
-        run: |
-          npx -y tailwindcss@3.4.19 -c tailwind.config.js -i static/_tailwind.src.css -o /tmp/tw.css --minify
-          diff -q /tmp/tw.css static/tailwind.min.css || { echo "::error::static/tailwind.min.css is stale - run bash scripts/build-tailwind.sh"; exit 1; }
+      - name: Game client scripts parse
+        run: for f in static/game/*.js; do node --check "$f"; done
 
   docker:
     runs-on: ubuntu-latest
@@ -64,7 +68,9 @@ jobs:
           test "$(curl -s localhost:8000/api/library | jq '.total')" = 3
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8000/api/settings)" = 404
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/docs)" = 404
-          curl -fsS -H 'Accept-Encoding: br' -D - -o /dev/null localhost:8000/static/app.js | grep -qi '^content-encoding: br'
+          curl -fsS -H 'Accept-Encoding: br' -D - -o /dev/null localhost:8000/static/game/pkg/riffboard_game_bg.wasm | grep -qi '^content-encoding: br'
+          curl -fsS -D - -o /dev/null localhost:8000/ | grep -qi "^content-security-policy: .*wasm-unsafe-eval"
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/api/plugins)" = 404
           docker exec rb /app/riffboard admin rescan
           docker exec rb /app/riffboard healthcheck
           docker logs rb

@@ -5,11 +5,11 @@
 !Cargo.lock
 !src/
 !src/**
+!crates/
+!crates/**
+!scripts/
+!scripts/build-game.sh
+static/game/pkg/
 !static/
 !static/**
-!plugins/
-!plugins/**
-plugins/*/test/
-plugins/*/tests/
-plugins/*/package.json
 **/.DS_Store

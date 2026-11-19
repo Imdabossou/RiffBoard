@@ -66,6 +66,13 @@ impl Game {
         }
     }
 
+    /// Left-handed view (mirrored highway).
+    pub fn set_lefty(&mut self, on: bool) {
+        if let Some(s) = &mut self.state {
+            s.opts.lefty = on;
+        }
+    }
+
     /// Starts judging from the microphone at `sample_rate`.
     pub fn enable_mic(&mut self, sample_rate: f64) {
         if let Some(s) = &mut self.state {
