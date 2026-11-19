@@ -407,12 +407,6 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
         rgba(add3([0.045, 0.05, 0.07], acc, 0.025), 0.86),
         0.0,
     );
-    // The board pulses on every beat (harder on the first beat of a bar).
-    let bi = ch.beats.partition_point(|b| b.time <= f.t);
-    let pulse = ch.beats[..bi].last().map_or(0.0, |b| {
-        let k = if b.measure.is_some() { 1.0 } else { 0.55 };
-        k * (-((f.t - b.time) as f32) * 7.0).exp()
-    });
     let anchor = ch.anchor_at(f.t.max(0.0));
     let lo = (anchor.fret - 1).max(0) as f32;
     let aw = anchor.width.max(4) as f32;
@@ -420,7 +414,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
         &mut out.opaque,
         [lo + aw / 2.0, -0.005, mid_z],
         [aw, 0.02, depth],
-        rgba(add3([0.09, 0.095, 0.13], acc, 0.09 + 0.1 * pulse), 1.0),
+        rgba(add3([0.09, 0.095, 0.13], acc, 0.11), 1.0),
         0.0,
     );
     // Lit edges of the fret window, running off into the distance.
@@ -430,7 +424,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
             [x, 0.012, mid_z],
             [0.06, 0.02, depth],
             rgba(acc, 1.0),
-            0.5 + 0.5 * pulse,
+            0.6,
         );
     }
     // Haze on the horizon, in the second stage colour.
@@ -439,7 +433,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
         [f.cam_x, 2.0, far * 0.9],
         [70.0, 22.0],
         opts.accent2,
-        0.22 + 0.08 * pulse,
+        0.24,
         true,
     );
     push_glow(
@@ -447,7 +441,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
         [f.cam_x, 0.5, far * 0.85],
         [30.0, 8.0],
         acc,
-        0.18 + 0.1 * pulse,
+        0.2,
         true,
     );
 
@@ -491,7 +485,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
                 [fret_x(fr as f32), wire_h / 2.0, 0.0],
                 [0.5, wire_h * 1.25],
                 acc,
-                0.22 + 0.15 * pulse,
+                0.26,
                 false,
             );
         }
