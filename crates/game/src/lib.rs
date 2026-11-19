@@ -52,7 +52,7 @@ impl State {
             effects: Vec::with_capacity(64),
             opts: Options::default(),
             last_t: 0.0,
-            batches: Batches::default(),
+            batches: Batches::reserved(),
             font: Font::default(),
             sensitivity: 0.5,
             density,

@@ -10,8 +10,12 @@ use riffboard_core::chart::{Chart, Note};
 
 use crate::math::{self, Mat4};
 
-/// Floats per box instance: centre(3) size(3) colour(4) glow(1).
-pub const BOX_FLOATS: usize = 11;
+/// Floats per box instance: centre(3) size(3) colour(4) glow(1) style(1).
+pub const BOX_FLOATS: usize = 12;
+/// Box styles, shaded differently in gl.rs.
+pub const STYLE_MATTE: f32 = 0.0;
+pub const STYLE_GEM: f32 = 1.0;
+pub const STYLE_RIBBON: f32 = 2.0;
 /// Floats per glyph instance: centre(3) size(2) uv(4) colour(4) mode(1).
 pub const GLYPH_FLOATS: usize = 14;
 
@@ -38,6 +42,10 @@ pub const STRING_RGB: [[f32; 3]; 8] = [
 
 pub const BG: [f32; 3] = [0.035, 0.04, 0.06];
 
+/// RiffBoard's own stage colours (from its icon), for unbranded sites.
+pub const RIFFBOARD_CYAN: [f32; 3] = [0.13, 0.83, 0.93];
+pub const RIFFBOARD_VIOLET: [f32; 3] = [0.49, 0.23, 0.93];
+
 const FRETS: i32 = 24;
 const STRING_GAP: f32 = 0.42;
 const STRING_BASE: f32 = 0.32;
@@ -54,6 +62,10 @@ pub struct Options {
     pub low_string_bottom: bool,
     /// Left-handed: mirror the highway (frets run right to left).
     pub lefty: bool,
+    /// Stage light colour (the band's accent, or RiffBoard's), and a second
+    /// colour for the haze on the horizon.
+    pub accent: [f32; 3],
+    pub accent2: [f32; 3],
 }
 
 impl Default for Options {
@@ -62,6 +74,8 @@ impl Default for Options {
             speed: 11.0,
             low_string_bottom: false,
             lefty: false,
+            accent: RIFFBOARD_CYAN,
+            accent2: RIFFBOARD_VIOLET,
         }
     }
 }
@@ -104,14 +118,28 @@ pub struct Hud {
 pub struct Batches {
     pub opaque: Vec<f32>,
     pub clear: Vec<f32>,
+    /// Additive glow sprites (glyph instances), drawn over the boxes.
+    pub glow: Vec<f32>,
     pub text: Vec<f32>,
     pub hud: Vec<f32>,
 }
 
 impl Batches {
+    /// Room for a busy frame up front, so playing never grows these.
+    pub fn reserved() -> Batches {
+        Batches {
+            opaque: Vec::with_capacity(2048 * BOX_FLOATS),
+            clear: Vec::with_capacity(2048 * BOX_FLOATS),
+            glow: Vec::with_capacity(1024 * GLYPH_FLOATS),
+            text: Vec::with_capacity(2048 * GLYPH_FLOATS),
+            hud: Vec::with_capacity(512 * GLYPH_FLOATS),
+        }
+    }
+
     fn clear_all(&mut self) {
         self.opaque.clear();
         self.clear.clear();
+        self.glow.clear();
         self.text.clear();
         self.hud.clear();
     }
@@ -159,9 +187,47 @@ pub fn anchor_centre(fret: i32, width: i32) -> f32 {
 }
 
 fn push_box(v: &mut Vec<f32>, c: [f32; 3], s: [f32; 3], col: [f32; 4], glow: f32) {
+    push_styled(v, c, s, col, glow, STYLE_MATTE);
+}
+
+fn push_styled(v: &mut Vec<f32>, c: [f32; 3], s: [f32; 3], col: [f32; 4], glow: f32, style: f32) {
     v.extend_from_slice(&[
-        c[0], c[1], c[2], s[0], s[1], s[2], col[0], col[1], col[2], col[3], glow,
+        c[0], c[1], c[2], s[0], s[1], s[2], col[0], col[1], col[2], col[3], glow, style,
     ]);
+}
+
+/// A soft additive glow, standing upright in the world (or, with `haze`,
+/// not faded by distance).
+fn push_glow(v: &mut Vec<f32>, c: [f32; 3], size: [f32; 2], col: [f32; 3], a: f32, haze: bool) {
+    let uv = cell_uv(CELL_GLOW);
+    v.extend_from_slice(&[
+        c[0],
+        c[1],
+        c[2],
+        size[0],
+        size[1],
+        uv[0],
+        uv[1],
+        uv[2],
+        uv[3],
+        col[0],
+        col[1],
+        col[2],
+        a,
+        if haze { 2.0 } else { 0.0 },
+    ]);
+}
+
+fn mix3(a: [f32; 3], b: [f32; 3], k: f32) -> [f32; 3] {
+    [
+        a[0] + (b[0] - a[0]) * k,
+        a[1] + (b[1] - a[1]) * k,
+        a[2] + (b[2] - a[2]) * k,
+    ]
+}
+
+fn add3(a: [f32; 3], b: [f32; 3], k: f32) -> [f32; 3] {
+    [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k]
 }
 
 fn cell_uv(cell: usize) -> [f32; 4] {
@@ -333,13 +399,20 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
     // Board (slightly see-through, so a backdrop shows faintly beneath it;
     // first in the blended list, so it sits under every note), and the lit
     // fret window of the current anchor.
+    let acc = opts.accent;
     push_box(
         &mut out.clear,
         [board_w / 2.0 - 0.5, -0.06, mid_z],
         [board_w + 1.0, 0.1, depth],
-        rgba([0.06, 0.065, 0.09], 0.86),
+        rgba(add3([0.045, 0.05, 0.07], acc, 0.025), 0.86),
         0.0,
     );
+    // The board pulses on every beat (harder on the first beat of a bar).
+    let bi = ch.beats.partition_point(|b| b.time <= f.t);
+    let pulse = ch.beats[..bi].last().map_or(0.0, |b| {
+        let k = if b.measure.is_some() { 1.0 } else { 0.55 };
+        k * (-((f.t - b.time) as f32) * 7.0).exp()
+    });
     let anchor = ch.anchor_at(f.t.max(0.0));
     let lo = (anchor.fret - 1).max(0) as f32;
     let aw = anchor.width.max(4) as f32;
@@ -347,8 +420,35 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
         &mut out.opaque,
         [lo + aw / 2.0, -0.005, mid_z],
         [aw, 0.02, depth],
-        rgba([0.13, 0.14, 0.19], 1.0),
+        rgba(add3([0.09, 0.095, 0.13], acc, 0.09 + 0.1 * pulse), 1.0),
         0.0,
+    );
+    // Lit edges of the fret window, running off into the distance.
+    for x in [lo, lo + aw] {
+        push_box(
+            &mut out.opaque,
+            [x, 0.012, mid_z],
+            [0.06, 0.02, depth],
+            rgba(acc, 1.0),
+            0.5 + 0.5 * pulse,
+        );
+    }
+    // Haze on the horizon, in the second stage colour.
+    push_glow(
+        &mut out.glow,
+        [f.cam_x, 2.0, far * 0.9],
+        [70.0, 22.0],
+        opts.accent2,
+        0.22 + 0.08 * pulse,
+        true,
+    );
+    push_glow(
+        &mut out.glow,
+        [f.cam_x, 0.5, far * 0.85],
+        [30.0, 8.0],
+        acc,
+        0.18 + 0.1 * pulse,
+        true,
     );
 
     // Fret wires and inlay dots.
@@ -374,7 +474,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
     for fr in 0..=FRETS {
         let inside = (fr as f32) >= lo && (fr as f32) <= lo + aw;
         let (c, a, g) = if inside {
-            ([0.9, 0.8, 0.55], 0.9, 0.3)
+            (mix3([1.0, 1.0, 1.0], acc, 0.45), 0.95, 0.35)
         } else {
             ([0.32, 0.34, 0.42], 0.55, 0.0)
         };
@@ -385,6 +485,16 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
             rgba(c, a),
             g,
         );
+        if inside {
+            push_glow(
+                &mut out.glow,
+                [fret_x(fr as f32), wire_h / 2.0, 0.0],
+                [0.5, wire_h * 1.25],
+                acc,
+                0.22 + 0.15 * pulse,
+                false,
+            );
+        }
     }
     for fr in [3, 5, 7, 9, 12, 15, 17, 19, 21, 24] {
         let x = note_x(fr);
@@ -422,7 +532,7 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
     for b in ch.beats[b0..].iter().take_while(|b| b.time <= f.t + VIEW_S) {
         let bar = b.measure.is_some();
         let (th, c) = if bar {
-            (0.06, [0.36, 0.38, 0.5])
+            (0.07, mix3([0.3, 0.32, 0.42], acc, 0.55))
         } else {
             (0.025, [0.2, 0.21, 0.28])
         };
@@ -439,33 +549,91 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
 
     // Strings at the hit line; a string lights up while a note on it is due.
     let mut due = [false; 8];
+    // Where and when the latest note on each string was played (for the
+    // string's vibration).
+    let mut due_x = [0.0f32; 8];
+    let mut due_t = [f64::NEG_INFINITY; 8];
     // (Look back far enough to catch long sustains still ringing.)
     let rings = |time: f64, sus: f64| time - 0.12 <= f.t && f.t <= time + sus.max(0.12);
     let n0 = ch.notes.partition_point(|n| n.time < f.t - 12.0);
     for n in ch.notes[n0..].iter().take_while(|n| n.time <= f.t + 0.12) {
         if rings(n.time, n.sustain) {
-            due[n.string.min(7)] = true;
+            let s = n.string.min(7);
+            due[s] = true;
+            if n.time <= f.t && n.time > due_t[s] {
+                due_t[s] = n.time;
+                due_x[s] = if n.fret == 0 {
+                    lo + aw / 2.0
+                } else {
+                    note_x(n.fret)
+                };
+            }
         }
     }
     let c0 = ch.chords.partition_point(|c| c.time < f.t - 12.0);
     for c in ch.chords[c0..].iter().take_while(|c| c.time <= f.t + 0.12) {
         for n in &c.notes {
             if rings(c.time, n.sustain) {
-                due[n.string.min(7)] = true;
+                let s = n.string.min(7);
+                due[s] = true;
+                if c.time <= f.t && c.time > due_t[s] {
+                    due_t[s] = c.time;
+                    due_x[s] = if n.fret == 0 {
+                        lo + aw / 2.0
+                    } else {
+                        note_x(n.fret)
+                    };
+                }
             }
         }
     }
     for (s, lit) in due.iter().enumerate().take(strings) {
         let y = string_y(s, strings, opts);
         let c = STRING_RGB[s % 8];
-        let (k, g) = if *lit { (1.0, 0.8) } else { (0.55, 0.0) };
+        if !*lit {
+            push_box(
+                &mut out.opaque,
+                [board_w / 2.0 - 0.5, y, 0.0],
+                [board_w, 0.035, 0.035],
+                rgba(scale(c, 0.55), 1.0),
+                0.0,
+            );
+            continue;
+        }
+        // A ringing string glows and vibrates around where it was played.
+        push_glow(
+            &mut out.glow,
+            [due_x[s], y, 0.05],
+            [board_w * 0.9, 0.42],
+            c,
+            0.4,
+            false,
+        );
+        let age = (f.t - due_t[s]).max(0.0) as f32;
+        let amp = if due_t[s].is_finite() {
+            0.07 * (-age * 2.2).exp()
+        } else {
+            0.0
+        };
+        // Vibration looks like a blurred band: the bright string itself, plus
+        // faint copies either side that close in as the note decays.
         push_box(
             &mut out.opaque,
             [board_w / 2.0 - 0.5, y, 0.0],
-            [board_w, 0.035, 0.035],
-            rgba(scale(c, k), 1.0),
-            g,
+            [board_w, 0.045, 0.045],
+            rgba(c, 1.0),
+            0.9,
         );
+        let wob = 0.6 + 0.4 * (f.t as f32 * 47.0).sin().abs();
+        for side in [-1.0f32, 1.0] {
+            push_box(
+                &mut out.clear,
+                [board_w / 2.0 - 0.5, y + side * amp * wob, 0.01],
+                [board_w, 0.03, 0.03],
+                rgba(c, 0.45 * (amp / 0.07)),
+                0.8,
+            );
+        }
     }
 
     // Notes and chords, far to near (so nearer glyphs draw over farther ones).
@@ -598,12 +766,27 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
             [1.0, 1.0, 1.0, a * 0.8],
             false,
         );
+        // Sparks thrown up and out, falling back (no state: a function of age).
+        for i in 0..10 {
+            let ang = i as f32 * 0.628 + e.x * 1.7;
+            let sp = 2.2 + (i % 3) as f32 * 0.9;
+            let px = e.x + ang.cos() * sp * age;
+            let py = e.y + (ang.sin().abs() * sp + 1.5) * age - 6.0 * age * age;
+            push_glow(
+                &mut out.glow,
+                [px, py, 0.1 + 0.6 * age],
+                [0.22, 0.22],
+                mix3(c, [1.0, 1.0, 1.0], 0.4),
+                (1.0 - k) * 0.9,
+                false,
+            );
+        }
     }
 
     if opts.lefty {
         mirror(out);
     }
-    build_hud(f, font, out);
+    build_hud(f, font, out, opts.accent);
     vp
 }
 
@@ -619,8 +802,10 @@ fn mirror(out: &mut Batches) {
             inst[0] = -inst[0];
         }
     }
-    for inst in out.text.as_chunks_mut::<GLYPH_FLOATS>().0 {
-        inst[0] = -inst[0];
+    for v in [&mut out.text, &mut out.glow] {
+        for inst in v.as_chunks_mut::<GLYPH_FLOATS>().0 {
+            inst[0] = -inst[0];
+        }
     }
 }
 
@@ -701,12 +886,13 @@ fn draw_note(
                 } else {
                     0.16
                 };
-                push_box(
+                push_styled(
                     &mut out.clear,
                     [x, y - 0.06, (z0 + z1) / 2.0],
-                    [w, 0.06, (z0 - z1).abs() + 0.02],
+                    [w, 0.07, (z0 - z1).abs() + 0.02],
                     rgba(col, ta * a),
-                    if hit { 0.5 } else { 0.1 },
+                    if hit || past { 0.8 } else { 0.25 },
+                    STYLE_RIBBON,
                 );
             }
         }
@@ -754,27 +940,62 @@ fn draw_note(
     } else {
         0.08
     };
+    // A halo builds up as the note comes in, strongest while held.
+    let halo = if missed {
+        0.0
+    } else if held {
+        0.6 + 0.15 * ((f.t * 12.0).sin() as f32)
+    } else {
+        let ahead = (n.time - f.t) as f32;
+        if (0.0..1.0).contains(&ahead) {
+            0.45 * (1.0 - ahead)
+        } else {
+            0.0
+        }
+    };
     if n.fret == 0 {
         // Open string: a bar across the fret window.
         let cx = anchor_centre(anchor_fret, anchor_width) - 0.5;
         let w = anchor_width.max(4) as f32;
-        push_box(
+        push_styled(
             &mut out.clear,
             [cx, y, z],
-            [w, 0.12, 0.22],
+            [w, 0.14, 0.22],
             rgba(col, a),
             glow,
+            STYLE_GEM,
         );
+        if halo > 0.0 {
+            push_glow(
+                &mut out.glow,
+                [cx, y, z + 0.1],
+                [w * 1.1, 0.7],
+                col,
+                halo * a,
+                false,
+            );
+        }
         return;
     }
     let x = note_x(n.fret);
-    push_box(
+    push_styled(
         &mut out.clear,
         [x, y, z],
-        [0.78, 0.3, 0.26],
+        [0.8, 0.32, 0.26],
         rgba(col, a),
         glow,
+        STYLE_GEM,
     );
+    if halo > 0.0 {
+        push_glow(
+            &mut out.glow,
+            [x, y, z + 0.15],
+            [1.7, 1.0],
+            col,
+            halo * a,
+            false,
+        );
+    }
     if label {
         let txt = fret_label(n.fret);
         push_text(
@@ -889,7 +1110,7 @@ pub fn nav_seek(chart: &Chart, end: f64, width: f32, dpr: f32, x: f32, y: f32) -
     })
 }
 
-fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
+fn build_hud(f: &Frame, font: &Font, out: &mut Batches, acc: [f32; 3]) {
     let d = f.dpr.max(1.0);
     let m = 16.0 * d;
     let h = f.hud;
@@ -932,12 +1153,13 @@ fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
             let busy = f.density.get(i).copied().unwrap_or(0.5);
             let bh = nh * (0.22 + 0.78 * busy);
             let played = secs.get(i + 1).is_some_and(|n| n.time <= f.t);
-            let a = if i == cur {
-                0.55
+            // Played sections in the stage colour, the current one bright.
+            let bar_col = if i == cur {
+                [acc[0], acc[1], acc[2], 0.95]
             } else if played {
-                0.16
+                [acc[0], acc[1], acc[2], 0.4]
             } else {
-                0.28
+                [1.0, 1.0, 1.0, 0.2]
             };
             hud_rect(
                 &mut out.hud,
@@ -945,7 +1167,7 @@ fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
                 ny + nh - bh,
                 (x1 - x0 - 2.0 * d).max(1.0),
                 bh,
-                [1.0, 1.0, 1.0, a],
+                bar_col,
             );
             if !sec.name.is_empty() && text_width(font, &sec.name, label_h) < x1 - x0 - 8.0 * d {
                 let col = if i == cur {
@@ -1051,7 +1273,12 @@ fn build_hud(f: &Frame, font: &Font, out: &mut Batches) {
             for word in &l.words {
                 let lit = k == 0 && word.time <= f.t;
                 let col = if lit {
-                    [1.0, 0.86, 0.45, 1.0]
+                    [
+                        0.5 + 0.5 * acc[0],
+                        0.5 + 0.5 * acc[1],
+                        0.5 + 0.5 * acc[2],
+                        1.0,
+                    ]
                 } else if k == 0 {
                     white
                 } else {
@@ -1185,8 +1412,14 @@ mod tests {
         let c = chart();
         let nr = vec![None; c.notes.len()];
         let cr = vec![None; c.chords.len()];
-        let mut out = Batches::default();
-        let mut caps = (0, 0, 0, 0);
+        let mut out = Batches::reserved();
+        let caps = (
+            out.opaque.capacity(),
+            out.clear.capacity(),
+            out.glow.capacity(),
+            out.text.capacity(),
+            out.hud.capacity(),
+        );
         for k in 0..200 {
             let f = Frame {
                 chart: &c,
@@ -1207,17 +1440,16 @@ mod tests {
                 density: &[],
             };
             build(&f, &Options::default(), &Font::default(), &mut out);
-            if k == 100 {
-                caps = (
-                    out.opaque.capacity(),
-                    out.clear.capacity(),
-                    out.text.capacity(),
-                    out.hud.capacity(),
-                );
-            }
         }
-        // Capacity is reached early; later frames reuse it.
-        assert!(out.opaque.capacity() == caps.0 && out.hud.capacity() == caps.3);
+        // The reserved room is enough: no frame grew a buffer.
+        let now = (
+            out.opaque.capacity(),
+            out.clear.capacity(),
+            out.glow.capacity(),
+            out.text.capacity(),
+            out.hud.capacity(),
+        );
+        assert_eq!(now, caps);
     }
 
     #[test]

@@ -124,6 +124,7 @@ export class Session {
     this.game.set_speed(this.opts.speed);
     this.game.set_low_string_bottom(!!this.opts.lowStringBottom);
     this.game.set_lefty(!!this.opts.lefty);
+    if (this.opts.accent) this.game.set_accent(...this.opts.accent, ...this.opts.accent2);
     this.game.set_sensitivity(this.opts.sensitivity);
 
     if (this.opts.backdropUrl) {

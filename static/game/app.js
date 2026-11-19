@@ -85,6 +85,19 @@ async function loadSite() {
   } catch { /* unbranded */ }
 }
 
+/** The band's colours as the game's stage lights (unbranded: the game's own). */
+function stageColours() {
+  if (!document.documentElement.classList.contains('branded')) return {};
+  const css = getComputedStyle(document.documentElement);
+  const rgb = (name) => {
+    const v = css.getPropertyValue(name).trim().split(/\s+/).map(Number);
+    return v.length === 3 && v.every((x) => x >= 0 && x <= 255) ? v.map((x) => x / 255) : null;
+  };
+  const accent = rgb('--fb-primary');
+  if (!accent) return {};
+  return { accent, accent2: rgb('--fb-primaryHi') || accent };
+}
+
 // ── Router ──────────────────────────────────────────────────────────────
 
 function route() {
@@ -232,7 +245,7 @@ async function startPlay(filename, arr, mode, song) {
   playEl.hidden = false;
   document.body.style.overflow = 'hidden';
   const backdropUrl = settings.backdrop ? (site.hero_image || '/static/brand/hero.png') : '';
-  const s = new Session($('#stage'), { ...settings, backdropUrl });
+  const s = new Session($('#stage'), { ...settings, backdropUrl, ...stageColours() });
   session = s;
   s.mode = mode;
   s.filename = filename;

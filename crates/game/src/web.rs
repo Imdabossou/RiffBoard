@@ -57,6 +57,15 @@ impl Game {
         self.renderer.set_backdrop(img)
     }
 
+    /// Stage light colours (0..1 RGB): the band's accent and a second
+    /// colour for the horizon haze.
+    pub fn set_accent(&mut self, r: f32, g: f32, b: f32, r2: f32, g2: f32, b2: f32) {
+        if let Some(s) = &mut self.state {
+            s.opts.accent = [r, g, b];
+            s.opts.accent2 = [r2, g2, b2];
+        }
+    }
+
     /// Note speed (world units per second; 11 is the default).
     pub fn set_speed(&mut self, speed: f32) {
         if let Some(s) = &mut self.state {
@@ -117,7 +126,8 @@ impl Game {
         let speed = s.opts.speed;
         // Fade over the far 40% of the visible stretch.
         let fog = [speed * 3.2 * 0.55, speed * 3.2 * 0.98];
-        self.renderer.draw(&s.batches, &vp, w, h, fog);
+        self.renderer
+            .draw(&s.batches, &vp, w, h, fog, (t.rem_euclid(1000.0)) as f32);
     }
 
     /// Song time to jump to for a click at CSS pixel (x, y) on a canvas of

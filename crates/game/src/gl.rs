@@ -20,36 +20,74 @@ layout(location=2) in vec3 i_center;
 layout(location=3) in vec3 i_size;
 layout(location=4) in vec4 i_color;
 layout(location=5) in float i_glow;
+layout(location=6) in float i_style;
 uniform mat4 u_vp;
 out vec3 v_nrm;
+out vec3 v_local;
+out vec3 v_size;
 out vec4 v_color;
 out float v_glow;
+out float v_style;
 out float v_depth;
 void main() {
     vec3 p = i_center + a_pos * i_size;
     gl_Position = u_vp * vec4(p, 1.0);
     v_nrm = a_nrm;
+    v_local = a_pos;
+    v_size = i_size;
     v_color = i_color;
     v_glow = i_glow;
+    v_style = i_style;
     v_depth = -p.z;
 }"#;
 
+// Styles: 0 matte, 1 gem (bevelled, glossy, rim-lit), 2 ribbon (sustain:
+// bright core with a shimmer running along it).
 const BOX_FS: &str = r#"#version 300 es
 precision mediump float;
 in vec3 v_nrm;
+in vec3 v_local;
+in vec3 v_size;
 in vec4 v_color;
 in float v_glow;
+in float v_style;
 in float v_depth;
 uniform vec3 u_fog_color;
 uniform vec2 u_fog;
+uniform float u_time;
 out vec4 o;
 void main() {
     vec3 l = normalize(vec3(0.25, 0.85, 0.55));
     float d = max(dot(v_nrm, l), 0.0);
-    vec3 c = v_color.rgb * (0.42 + 0.58 * d) + v_color.rgb * v_glow;
+    vec3 base = v_color.rgb;
+    vec3 c = base * (0.42 + 0.58 * d) + base * v_glow;
+    float a = v_color.a;
+    if (v_style > 0.5 && v_style < 1.5) {
+        // Gem: distance to the face edge in world units, for a bevel line,
+        // a glossy upper half on the front and a bright rim.
+        vec3 q = abs(v_local) * v_size;
+        vec3 h = v_size * 0.5;
+        vec3 e = h - q;
+        float edge;
+        if (abs(v_nrm.z) > 0.5) edge = min(e.x, e.y);
+        else if (abs(v_nrm.y) > 0.5) edge = min(e.x, e.z);
+        else edge = min(e.y, e.z);
+        float bevel = 1.0 - smoothstep(0.0, 0.045, edge);
+        float gloss = (v_nrm.z > 0.5) ? smoothstep(0.0, 0.5, v_local.y + 0.15) * 0.35 : 0.0;
+        float top = (v_nrm.y > 0.5) ? 0.25 : 0.0;
+        c = base * (0.55 + 0.45 * d + v_glow) + vec3(gloss + top);
+        c = mix(c, base * 0.35 + vec3(0.9), bevel * 0.55);
+    } else if (v_style > 1.5) {
+        // Ribbon: brighter down the middle, shimmering along its length.
+        float across = 1.0 - abs(v_local.x) * 2.0;
+        float along = v_local.z * v_size.z;
+        float shimmer = 0.5 + 0.5 * sin(along * 5.0 + u_time * 9.0);
+        c = base * (0.6 + 0.5 * v_glow) * (0.75 + 0.5 * across) + vec3(0.25 * shimmer * across);
+        a *= 0.55 + 0.45 * across;
+    }
     // Far away, things darken a little and fade out into the backdrop.
     float f = smoothstep(u_fog.x, u_fog.y, v_depth);
-    o = vec4(mix(c, u_fog_color, f * 0.5), v_color.a * (1.0 - f));
+    o = vec4(mix(c, u_fog_color, f * 0.5), a * (1.0 - f));
 }"#;
 
 const GLYPH_VS: &str = r#"#version 300 es
@@ -66,7 +104,7 @@ out vec4 v_color;
 out float v_depth;
 void main() {
     vec2 c = a_corner - 0.5;
-    if (i_mode > 0.5) {
+    if (i_mode > 0.5 && i_mode < 1.5) {
         vec2 px = i_center.xy + c * i_size;
         gl_Position = vec4(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0, 0.0, 1.0);
         v_uv = vec2(mix(i_uv.x, i_uv.z, a_corner.x), mix(i_uv.y, i_uv.w, a_corner.y));
@@ -75,7 +113,8 @@ void main() {
         vec3 p = i_center + vec3(c * i_size, 0.0);
         gl_Position = u_vp * vec4(p, 1.0);
         v_uv = vec2(mix(i_uv.x, i_uv.z, a_corner.x), mix(i_uv.w, i_uv.y, a_corner.y));
-        v_depth = -p.z;
+        // Mode 2 (horizon haze) is never faded by distance.
+        v_depth = i_mode > 1.5 ? 0.0 : -p.z;
     }
     v_color = i_color;
 }"#;
@@ -208,6 +247,7 @@ pub struct Renderer {
     u_box_vp: Option<WebGlUniformLocation>,
     u_box_fog: Option<WebGlUniformLocation>,
     u_box_fog_color: Option<WebGlUniformLocation>,
+    u_box_time: Option<WebGlUniformLocation>,
     u_gl_vp: Option<WebGlUniformLocation>,
     u_gl_screen: Option<WebGlUniformLocation>,
     u_gl_fog: Option<WebGlUniformLocation>,
@@ -215,6 +255,7 @@ pub struct Renderer {
     opaque: Layer,
     clear: Layer,
     text: Layer,
+    glow: Layer,
     hud: Layer,
     _atlas: WebGlTexture,
     pub font: Font,
@@ -280,7 +321,7 @@ impl Renderer {
             let buf = gl.create_buffer().ok_or("no buffer")?;
             gl.bind_buffer(GL::ARRAY_BUFFER, Some(&buf));
             let stride = (BOX_FLOATS * 4) as i32;
-            for (loc, size, off) in [(2u32, 3, 0), (3, 3, 12), (4, 4, 24), (5, 1, 40)] {
+            for (loc, size, off) in [(2u32, 3, 0), (3, 3, 12), (4, 4, 24), (5, 1, 40), (6, 1, 44)] {
                 gl.enable_vertex_attrib_array(loc);
                 gl.vertex_attrib_pointer_with_i32(loc, size, GL::FLOAT, false, stride, off);
                 gl.vertex_attrib_divisor(loc, 1);
@@ -314,6 +355,7 @@ impl Renderer {
             u_box_vp: u(&box_prog, "u_vp"),
             u_box_fog: u(&box_prog, "u_fog"),
             u_box_fog_color: u(&box_prog, "u_fog_color"),
+            u_box_time: u(&box_prog, "u_time"),
             u_gl_vp: u(&glyph_prog, "u_vp"),
             u_gl_screen: u(&glyph_prog, "u_screen"),
             u_gl_fog: u(&glyph_prog, "u_fog"),
@@ -321,6 +363,7 @@ impl Renderer {
             opaque: box_layer(&gl)?,
             clear: box_layer(&gl)?,
             text: glyph_layer(&gl)?,
+            glow: glyph_layer(&gl)?,
             hud: glyph_layer(&gl)?,
             box_prog,
             glyph_prog,
@@ -349,7 +392,7 @@ impl Renderer {
         (w, h)
     }
 
-    pub fn draw(&mut self, b: &Batches, vp: &Mat4, w: u32, h: u32, fog: [f32; 2]) {
+    pub fn draw(&mut self, b: &Batches, vp: &Mat4, w: u32, h: u32, fog: [f32; 2], time: f32) {
         let gl = &self.gl;
         gl.viewport(0, 0, w as i32, h as i32);
         gl.clear_color(BG[0], BG[1], BG[2], 1.0);
@@ -381,12 +424,14 @@ impl Renderer {
         upload(gl, &mut self.opaque, &b.opaque);
         upload(gl, &mut self.clear, &b.clear);
         upload(gl, &mut self.text, &b.text);
+        upload(gl, &mut self.glow, &b.glow);
         upload(gl, &mut self.hud, &b.hud);
 
         gl.use_program(Some(&self.box_prog));
         gl.uniform_matrix4fv_with_f32_array(self.u_box_vp.as_ref(), false, vp);
         gl.uniform2f(self.u_box_fog.as_ref(), fog[0], fog[1]);
         gl.uniform3f(self.u_box_fog_color.as_ref(), BG[0], BG[1], BG[2]);
+        gl.uniform1f(self.u_box_time.as_ref(), time);
         // Blended too, so the far end of the highway can fade out.
         gl.enable(GL::BLEND);
         gl.blend_func(GL::SRC_ALPHA, GL::ONE_MINUS_SRC_ALPHA);
@@ -408,6 +453,11 @@ impl Renderer {
         gl.uniform1i(self.u_gl_tex.as_ref(), 0);
         gl.depth_mask(false);
         gl.disable(GL::DEPTH_TEST);
+        // Glows add light; the text goes on top of them.
+        gl.blend_func(GL::SRC_ALPHA, GL::ONE);
+        gl.bind_vertex_array(Some(&self.glow.vao));
+        gl.draw_arrays_instanced(GL::TRIANGLES, 0, 6, (b.glow.len() / GLYPH_FLOATS) as i32);
+        gl.blend_func(GL::SRC_ALPHA, GL::ONE_MINUS_SRC_ALPHA);
         gl.bind_vertex_array(Some(&self.text.vao));
         gl.draw_arrays_instanced(GL::TRIANGLES, 0, 6, (b.text.len() / GLYPH_FLOATS) as i32);
         gl.disable(GL::DEPTH_TEST);

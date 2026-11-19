@@ -15,6 +15,7 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
 - The highway is viewed down the neck: the strings run big across the bottom, with upright fret wires that light up across the current fret window, a ring on each string where the next note will land, and fret numbers underneath.
 - A section navigator runs along the top of the game: every section as a bar whose height shows how busy it is, the current one highlighted, and a playhead. In practice, click a section to jump to it.
 - Lyrics show in the top-left corner (current line with sung words lit, and the next line). The score moved to the top-right.
+- A look of its own: the band's accent colour (RiffBoard's cyan and violet when unbranded) lights the stage: the fret window and its edges, the fret wires, bar lines, the horizon haze, the navigator and the sung lyrics. Notes are glossy and bevelled and glow as they arrive, sustains are shimmering ribbons, the board pulses on the beat, a ringing string glows and blurs as it vibrates, and hits throw sparks.
 - The band's artwork (the site's hero image, or RiffBoard's own when unbranded) sits blurred and darkened behind the highway, which fades into it. It can be turned off in Settings.
 - Held notes stay on the fretboard, lit, until their sustain ends; notes that pass unplayed fade out at the line.
 - Score runs may be paused (they still can't skip or slow down). Practice runs can restart and jump to any section from the pause menu.
