@@ -311,7 +311,81 @@ impl Chart {
         c.beats.sort_by(|a, b| a.time.total_cmp(&b.time));
         c.anchors.sort_by(|a, b| a.time.total_cmp(&b.time));
         c.sections.sort_by(|a, b| a.time.total_cmp(&b.time));
+        c.anchors = c.hand_positions();
         c
+    }
+
+    /// Where the fretting hand sits through the song, worked out from the
+    /// notes: the window stays put while the notes fit in it and moves only
+    /// when one falls outside, to the chart's own anchor if that covers what
+    /// comes next, else by the smallest shift that does. Charts' anchors can
+    /// flip between windows that all hold the same notes, which would slide
+    /// the board for no reason.
+    fn hand_positions(&self) -> Vec<Anchor> {
+        // (time, lowest fret, highest fret) of every fretted note or chord.
+        let mut ev: Vec<(f64, i32, i32)> = Vec::new();
+        let span = |n: &Note| {
+            let end = n.slide_to.filter(|f| *f > 0).unwrap_or(n.fret);
+            (n.fret.min(end), n.fret.max(end))
+        };
+        for n in self.notes.iter().filter(|n| n.fret > 0) {
+            let (lo, hi) = span(n);
+            ev.push((n.time, lo, hi));
+        }
+        for ch in &self.chords {
+            let fretted = ch.notes.iter().filter(|n| n.fret > 0).map(span);
+            if let Some((lo, hi)) = fretted.reduce(|a, b| (a.0.min(b.0), a.1.max(b.1))) {
+                ev.push((ch.time, lo, hi));
+            }
+        }
+        if ev.is_empty() {
+            return self.anchors.clone();
+        }
+        ev.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+        let mut out: Vec<Anchor> = Vec::new();
+        let mut cur: Option<(i32, i32)> = None; // (first fret, width)
+        for i in 0..ev.len() {
+            let (t, lo, hi) = ev[i];
+            if let Some((f, w)) = cur
+                && lo >= f
+                && hi < f + w
+            {
+                continue;
+            }
+            // The run of notes from here that fits in one hand position.
+            let (mut mn, mut mx) = (lo, hi);
+            for &(_, l, h) in &ev[i + 1..] {
+                if h.max(mx) - l.min(mn) + 1 > 4.max(hi - lo + 1) {
+                    break;
+                }
+                mn = mn.min(l);
+                mx = mx.max(h);
+            }
+            let need = (mx - mn + 1).max(4);
+            let authored = self.anchor_at(t);
+            let aw = authored.width.max(4);
+            let pos = if !self.anchors.is_empty()
+                && authored.fret >= 1
+                && authored.fret <= mn
+                && authored.fret + aw > mx
+            {
+                (authored.fret, aw)
+            } else {
+                let f = match cur {
+                    Some((f, _)) if mx > f => mx - need + 1,
+                    _ => mn,
+                };
+                (f.max(1), need)
+            };
+            cur = Some(pos);
+            out.push(Anchor {
+                time: if out.is_empty() { t.min(0.0) } else { t },
+                fret: pos.0,
+                width: pos.1,
+            });
+        }
+        out
     }
 
     /// Parses a JSON array of highway messages.
@@ -402,12 +476,62 @@ mod tests {
         assert_eq!(c.chords[0].notes[1].time, 3.0);
         assert_eq!(c.judgeable(), 3);
         assert_eq!(c.last_event_time(), 3.0);
-        assert_eq!(c.anchor_at(6.0).fret, 7);
-        assert_eq!(c.anchor_at(1.0).fret, 3);
+        // Hand positions come from the notes: fret 3 then a 2-4 chord fit one
+        // window from fret 2; the authored move to fret 7 has no notes.
+        assert_eq!(c.anchor_at(1.0).fret, 2);
+        assert_eq!(c.anchor_at(6.0).fret, 2);
         assert_eq!(c.beats[0].measure, Some(1));
         assert_eq!(c.beats[1].measure, None);
         // Drop D open E string is D1 (26).
         assert_eq!(c.midi(&c.notes[1]), 26);
+    }
+
+    fn hand_chart(anchors: Value, frets: &[(f64, i32)]) -> Chart {
+        let notes: Vec<Value> = frets
+            .iter()
+            .map(|(t, f)| json!({"t": t, "s": 0, "f": f}))
+            .collect();
+        Chart::from_messages(&[
+            json!({"type": "song_info", "stringCount": 4, "arrangement": "Bass"}),
+            json!({"type": "anchors", "data": anchors}),
+            json!({"type": "notes", "data": notes}),
+        ])
+    }
+
+    #[test]
+    fn hand_stays_put_while_notes_fit() {
+        // The chart flips between windows at 1 and 3 (and blips to 5), but
+        // every note is on frets 1-3: the hand never moves.
+        let c = hand_chart(
+            json!([{"time": 0, "fret": 3, "width": 4}, {"time": 2, "fret": 1, "width": 4},
+                   {"time": 4, "fret": 5, "width": 4}, {"time": 4.2, "fret": 3, "width": 4},
+                   {"time": 6, "fret": 1, "width": 4}]),
+            &[
+                (0.5, 3),
+                (1.0, 3),
+                (2.5, 1),
+                (3.0, 2),
+                (4.5, 3),
+                (6.5, 1),
+                (7.0, 3),
+            ],
+        );
+        assert_eq!(c.anchors.len(), 1, "{:?}", c.anchors);
+        assert_eq!(c.anchors[0].fret, 1);
+    }
+
+    #[test]
+    fn hand_moves_when_a_note_leaves_the_window() {
+        let c = hand_chart(
+            json!([{"time": 0, "fret": 1, "width": 4}, {"time": 3, "fret": 7, "width": 4}]),
+            // 1-4, then 5 (just outside: shift by one), then 8-9 (the
+            // chart's window at 7 covers it, so take that).
+            &[(1.0, 1), (1.5, 4), (2.0, 5), (2.5, 3), (3.5, 8), (4.0, 9)],
+        );
+        let frets: Vec<i32> = c.anchors.iter().map(|a| a.fret).collect();
+        assert_eq!(frets, vec![1, 2, 7]);
+        assert_eq!(c.anchor_at(2.2).fret, 2);
+        assert_eq!(c.anchor_at(3.6).fret, 7);
     }
 
     #[test]
