@@ -27,6 +27,7 @@ the fork is in [its repository](https://github.com/got-feedback/feedBack).
 
 - The inherited fee[dB]ack frontend (about 58,000 lines of JavaScript), its plugins (3D highway, note detection, tuner, input setup) and the endpoints only they used: `/api/settings`, `/api/tunings`, `/api/plugins*`, `/api/library/stats|albums|artists|genres|tuning-names|providers*`, `/api/work/*`, `/api/startup-status*`, `/api/scan-status`. This also removes the code behind the open CodeQL alerts in the old highway.
 - Upstream's highway WebSocket (`/ws/highway/`) and its message format (tone changes, key tracks, scale degrees, naming modes, drum and notation flags), the library's filters, facets and tuning names, and the test suite that replayed the original Python server's responses.
+- `.sloppak` files (feedpak's old name): feedpak is RiffBoard's only song format. The unpack cache moved from `CONFIG_DIR/sloppak_cache` to `CONFIG_DIR/pack_cache`; the old folder is deleted on start.
 - Not yet carried over from the old player: loops, playback speed, difficulty levels and the tuner.
 
 ### Security

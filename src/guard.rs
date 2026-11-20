@@ -18,7 +18,7 @@ use subtle::ConstantTimeEq;
 
 use crate::web::AppState;
 
-const PACK_SUFFIXES: [&str; 2] = [".feedpak", ".sloppak"];
+const PACK_SUFFIXES: [&str; 1] = [".feedpak"];
 
 fn has_dotdot(path: &str) -> bool {
     let decoded = percent_encoding::percent_decode_str(path).decode_utf8_lossy();
@@ -196,6 +196,7 @@ mod tests {
             (&g, "/static/"),
             (&g, "/api/chart/"),
             (&g, "/api/pack/a.zip/file/x"),
+            (&g, "/api/pack/a.sloppak/file/x"),
             (&p, "/api/chart/a.feedpak"),
             // The old frontend's routes are gone.
             (&g, "/ws/highway/a/b.feedpak"),

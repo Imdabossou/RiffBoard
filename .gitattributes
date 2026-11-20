@@ -1,16 +1,6 @@
-# Shell scripts must use LF line endings — bash interprets a \r in the
-# shebang as part of the path, producing "/usr/bin/env: 'bash\r': No such
-# file or directory" on WSL2 / Linux when checked out with autocrlf=true.
+# Shell scripts must use LF line endings (bash reads a \r in the shebang as
+# part of the interpreter path).
 *.sh text eol=lf
 
-# Keep the minified Three.js bundle byte-identical across platforms.
-# Without this, autocrlf=true would rewrite the bundle's newlines on
-# Windows checkouts and the SHA-256 wouldn't match the upstream tag —
-# making the "pinned r170" claim in static/vendor/three/VERSION
-# dishonest. Scoped narrowly to the bundle (not the whole vendor dir)
-# so LICENSE / VERSION stay diff-readable for future version bumps.
-static/vendor/three/three.module.min.js binary
-
-# Sloppak test fixtures are zip archives — diffs and autocrlf rewrites
-# would corrupt them.
-tests/fixtures/*.sloppak binary
+# Packs are zip archives: diffs and autocrlf rewrites would corrupt them.
+*.feedpak binary

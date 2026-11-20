@@ -15,7 +15,8 @@ use std::sync::{Arc, Mutex};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-pub const PACK_EXTS: [&str; 2] = [".feedpak", ".sloppak"];
+/// The song format RiffBoard reads (zip or folder).
+pub const PACK_EXTS: [&str; 1] = [".feedpak"];
 
 /// Zip-bomb / abuse limits for unpacking a pack.
 const MAX_ENTRIES: usize = 4000;

@@ -35,14 +35,15 @@ tests/fixtures/    fixture feedpak library (make_fixtures.py rebuilds it)
 
 1. **The allowlist is the security boundary.** A route is reachable only if `src/guard.rs::is_allowed` lists its method + path. Adding a route means adding the narrowest possible rule there plus tests (the `allowlist` unit test and `tests/server.rs`), covering both the allow case and the deny cases around it. Never add a rule covering `/api/*`.
 2. **Visitors write exactly two things:** run tickets and scores. Anything per-user (settings, name) lives in the browser (localStorage, `rb-settings` / `rb-theme`). Don't add server-side per-user state.
-3. **The library is read-only.** Nothing writes into `DLC_DIR`. No seeding, no metadata write-back, no uploads.
-4. **Server settings come from the environment / `CONFIG_DIR/config.json`**, never from HTTP.
-5. **Admin routes** (`/api/admin/*`) require loopback, no proxy forwarding headers, and the token. Keep it that way.
-6. **No third-party requests from the page** (fonts, analytics, CDNs). The CSP in `web.rs` (`GAME_CSP`) enforces same-origin; keep it strict (no inline scripts; `wasm-unsafe-eval` only).
-7. **Untrusted text is escaped** (`esc()` in `app.js`) before it goes into HTML. Names are normalised server-side by `store::clean_name`.
-8. **Light + dark themes** for the menus: colours are `--fb-*` "R G B" variables in `app.css`, overridden by `/site.css`; the default is monochrome with the system `AccentColor` when unbranded. The game screen (`#play`) is always dark.
-9. **Shared rules live in `crates/core`.** The score formula and run checks are one function used by both the server and the game; never re-implement them in JavaScript.
-10. **One chart model.** `riffboard_core::chart::Chart` is what the server builds from a pack (`Chart::from_pack` + `finish`) and what the game reads (`GET /api/chart/<song>?arrangement=N`, serde JSON). Add a field there and both sides have it; don't add a second format.
+3. **feedpak is the only song format.** The server reads `.feedpak` packs (zip or folder; spec in `docs/upstream/feedpak-spec.md`). Don't add readers for other games' formats (e.g. `.psarc`), not even as an import path.
+4. **The library is read-only.** Nothing writes into `DLC_DIR`. No seeding, no metadata write-back, no uploads.
+5. **Server settings come from the environment / `CONFIG_DIR/config.json`**, never from HTTP.
+6. **Admin routes** (`/api/admin/*`) require loopback, no proxy forwarding headers, and the token. Keep it that way.
+7. **No third-party requests from the page** (fonts, analytics, CDNs). The CSP in `web.rs` (`GAME_CSP`) enforces same-origin; keep it strict (no inline scripts; `wasm-unsafe-eval` only).
+8. **Untrusted text is escaped** (`esc()` in `app.js`) before it goes into HTML. Names are normalised server-side by `store::clean_name`.
+9. **Light + dark themes** for the menus: colours are `--fb-*` "R G B" variables in `app.css`, overridden by `/site.css`; the default is monochrome with the system `AccentColor` when unbranded. The game screen (`#play`) is always dark.
+10. **Shared rules live in `crates/core`.** The score formula and run checks are one function used by both the server and the game; never re-implement them in JavaScript.
+11. **One chart model.** `riffboard_core::chart::Chart` is what the server builds from a pack (`Chart::from_pack` + `finish`) and what the game reads (`GET /api/chart/<song>?arrangement=N`, serde JSON). Add a field there and both sides have it; don't add a second format.
 
 ## Smoothness rules (the reason the engine exists)
 

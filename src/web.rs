@@ -101,7 +101,10 @@ const CHART_CACHE: usize = 12;
 
 impl AppState {
     pub fn new(cfg: Config, store: Store, admin_token: String) -> Self {
-        let cache = UnpackCache::new(cfg.config_dir.join("sloppak_cache"), cfg.cache_bytes);
+        // Unpacked zip packs live here; the old name's folder is just a stale
+        // copy of the same cache.
+        let _ = std::fs::remove_dir_all(cfg.config_dir.join("sloppak_cache"));
+        let cache = UnpackCache::new(cfg.config_dir.join("pack_cache"), cfg.cache_bytes);
         Self {
             cfg,
             index: Index::new(),

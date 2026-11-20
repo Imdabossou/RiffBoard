@@ -1,56 +1,21 @@
-__pycache__/
-*.pyc
-.venv/
-venv/
-dist/
-build/
-*.egg-info/
-*.log
-.env*
-.DS_Store
-.vscode/
-data/web_library.db
-static/*.ogg
-static/*.mp3
-static/*.wav
-static/art/
-static/audio_*
-plugins/*/
-!plugins/__init__.py
-# Bundled plugins ship in-tree; anything else dropped into plugins/ stays
-# untracked. Add new bundled plugins as `!plugins/<id>/` exceptions.
-!plugins/highway_3d/
-!plugins/highway_3d/**
-plugins/highway_3d/__pycache__/
-!plugins/drum_highway_3d/
-!plugins/drum_highway_3d/**
-plugins/drum_highway_3d/__pycache__/
-!plugins/keys_highway_3d/
-!plugins/keys_highway_3d/**
-plugins/keys_highway_3d/__pycache__/
-!plugins/tuner/
-!plugins/tuner/**
-plugins/tuner/__pycache__/
-!plugins/input_setup/
-!plugins/input_setup/**
-plugins/input_setup/__pycache__/
-!plugins/note_detect/
-!plugins/note_detect/**
-plugins/note_detect/__pycache__/
-node_modules/
-test-results/
-playwright-report/
-
-/dlc
-
-.vscode
-Thumbs.db
-*.tmp
-*.swp
-.idea/
-
 # Rust build output
 /target
 
 # Browser game build output (scripts/build-game.sh)
 /static/game/pkg/
+
+# Local run data (DLC_DIR / CONFIG_DIR when run from the checkout)
+/dlc
+/library
+/.config
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*.tmp
+.DS_Store
+Thumbs.db
+*.log
+.env*
+__pycache__/
