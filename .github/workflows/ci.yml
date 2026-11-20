@@ -65,7 +65,9 @@ jobs:
             --security-opt no-new-privileges -v "$PWD/tests/fixtures/library:/dlc:ro" riffboard:ci
           for i in $(seq 1 30); do curl -fsS localhost:8000/api/version && break; sleep 1; done
           curl -fsS localhost:8000/ -o /dev/null
-          test "$(curl -s localhost:8000/api/library | jq '.total')" = 3
+          test "$(curl -s localhost:8000/api/library | jq '.songs | length')" = 3
+          test "$(curl -s 'localhost:8000/api/chart/Fixture%20Band/Rich%20Song.feedpak' | jq '.notes | length > 0')" = true
+          curl -fsS -H 'Accept-Encoding: gzip' -D - -o /dev/null 'localhost:8000/api/chart/Fixture%20Band/Rich%20Song.feedpak' | grep -qi '^content-encoding: gzip'
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8000/api/settings)" = 404
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/docs)" = 404
           curl -fsS -H 'Accept-Encoding: br' -D - -o /dev/null localhost:8000/static/game/pkg/riffboard_game_bg.wasm | grep -qi '^content-encoding: br'
