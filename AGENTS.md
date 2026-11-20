@@ -1,4 +1,4 @@
-# RiffBoard — agent guide
+# AGENTS.md: RiffBoard agent guide
 
 RiffBoard is a public, play-only rhythm game for guitar and bass: visitors browse a song library, play along on a note highway with in-browser note detection, and post scores to per-song leaderboards. It runs on the open internet, so **every change is judged first by what it lets an anonymous visitor do to the server.**
 
@@ -51,7 +51,7 @@ tests/fixtures/    fixture feedpak library (make_fixtures.py rebuilds it)
 - The frame loop (`Session.loop` -> `Game::frame`) allocates nothing: `scene::build` refills reused `Vec`s (a test checks capacity stays fixed), HUD numbers are formatted on the stack, GPU buffers grow by powers of two. No `format!`/`collect` in per-frame paths.
 - Nothing touches the DOM during play. Score, streak, progress, section and mic level are drawn by the game. HTML overlays appear only when paused or finished.
 - Mic blocks are recycled between the worklet and the page (transfer back), so steady play makes no garbage.
-- Measure with a frame-time probe in Chromium (rAF intervals; with `--use-angle=gl` and `DRI_PRIME=1` on the maintainer's machine for the eGPU) and with CDP CPU throttling (6x/20x). Mid-run screenshots stall a frame: don't count those.
+- Measure with a frame-time probe in Chromium (rAF intervals; `--use-angle=gl` on Linux) and with CDP CPU throttling (6x/20x). Mid-run screenshots stall a frame: don't count those.
 
 ## Leaderboard flow
 
@@ -72,10 +72,11 @@ bash scripts/build-game.sh                   # needs wasm-bindgen CLI == the pin
 for f in static/game/*.js; do node --check "$f"; done
 ```
 
-Run locally: `bash scripts/build-game.sh && DLC_DIR=<folder of .feedpak> CONFIG_DIR=<tmp> cargo run`. On the maintainer's mini PC keep builds light: `CARGO_BUILD_JOBS=2`. The fixture packs' audio is a stub; to play in a browser use a pack with real audio.
+Run locally: `bash scripts/build-game.sh && DLC_DIR=<folder of .feedpak> CONFIG_DIR=<tmp> cargo run`. Keep builds light on small machines: `CARGO_BUILD_JOBS=2`. The fixture packs' audio is a stub; to play in a browser use a pack with real audio.
 
 ## Repo conventions
 
 - Branches: `main` (released) and `development` (work). Changes land on `development` first.
 - Licence: AGPL-3.0-only (inherited from upstream). The page footer links the source (`APP_SOURCE_URL`).
 - Don't put deployment details (hosts, IPs, ports, paths of a real deployment) in this repo.
+- Keep README.md short (what it is, screenshots, how to get it). Hosting how-to goes in `docs/guide.md`, developer detail in BUILDING.md.

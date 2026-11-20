@@ -1,7 +1,7 @@
 // The play session: chart loading, Web Audio playback, the song clock, the
 // microphone, and the frame loop that drives the wasm game.
 //
-// Smoothness rules (see CLAUDE.md "Game client"):
+// Smoothness rules (see AGENTS.md "Smoothness rules"):
 // - song time comes from the audio output clock, interpolated per frame;
 // - the frame loop allocates nothing and touches no DOM;
 // - everything on screen during play is drawn by the game into one canvas.
