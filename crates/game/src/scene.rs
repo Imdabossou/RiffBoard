@@ -53,6 +53,8 @@ const STRING_BASE: f32 = 0.32;
 const VIEW_S: f64 = 3.2;
 /// Seconds a note stays drawn after passing the hit line.
 const TAIL_S: f64 = 0.35;
+/// How far back to look for sustains still ringing.
+const SUSTAIN_LOOKBACK_S: f64 = 12.0;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
@@ -633,8 +635,14 @@ pub fn build(f: &Frame, opts: &Options, font: &Font, out: &mut Batches) -> Mat4 
     // Notes and chords, far to near (so nearer glyphs draw over farther ones).
     let lo_t = f.t - TAIL_S;
     let hi_t = f.t + VIEW_S;
-    let first_n = ch.notes.partition_point(|n| n.time + n.sustain < lo_t);
-    let first_c = ch.chords.partition_point(|c| c.time < lo_t - 2.0);
+    // Sorted by start, not end: look back far enough for long sustains (each
+    // one is still checked against its own end below).
+    let first_n = ch
+        .notes
+        .partition_point(|n| n.time < lo_t - SUSTAIN_LOOKBACK_S);
+    let first_c = ch
+        .chords
+        .partition_point(|c| c.time < lo_t - SUSTAIN_LOOKBACK_S);
     let last_n = ch.notes.partition_point(|n| n.time <= hi_t);
     let last_c = ch.chords.partition_point(|c| c.time <= hi_t);
     for i in (first_c..last_c).rev() {
@@ -869,7 +877,16 @@ fn draw_note(
             };
             let sliding = n.slide_to.is_some();
             let segs = if sliding { 8 } else { 1 };
-            let ta = if hit || past { 0.75 } else { 0.5 };
+            // The tail runs to its end whatever happened to the head: lit
+            // while held, dimmed (and grey) if the note was missed. Only its
+            // far end fades in; it never takes the head's fade-out.
+            let ta = if missed {
+                0.35
+            } else if hit || past {
+                0.75
+            } else {
+                0.5
+            } * fade(f.t, t0);
             for k in 0..segs {
                 let (s0, s1) = (k as f64 / segs as f64, (k + 1) as f64 / segs as f64);
                 let (ta_t, tb_t) = (t0 + (t1 - t0) * s0, t0 + (t1 - t0) * s1);
@@ -884,8 +901,14 @@ fn draw_note(
                     &mut out.clear,
                     [x, y - 0.06, (z0 + z1) / 2.0],
                     [w, 0.07, (z0 - z1).abs() + 0.02],
-                    rgba(col, ta * a),
-                    if hit || past { 0.8 } else { 0.25 },
+                    rgba(col, ta),
+                    if missed {
+                        0.0
+                    } else if hit || past {
+                        0.8
+                    } else {
+                        0.25
+                    },
                     STYLE_RIBBON,
                 );
             }
@@ -1399,6 +1422,70 @@ mod tests {
         assert!(out.clear.len() / BOX_FLOATS < gems_t0);
         // HUD always has the progress bar and score.
         assert!(out.hud.len() / GLYPH_FLOATS >= 3);
+    }
+
+    /// Ribbon instances (style, alpha, near z, far z) in the blended batch.
+    fn ribbons(out: &Batches) -> Vec<(f32, f32, f32)> {
+        out.clear
+            .as_chunks::<BOX_FLOATS>()
+            .0
+            .iter()
+            .filter(|b| b[11] == STYLE_RIBBON)
+            .map(|b| (b[9], b[2] + b[5] / 2.0, b[2] - b[5] / 2.0))
+            .collect()
+    }
+
+    #[test]
+    fn sustain_tail_lasts_to_its_end() {
+        // One long note, then short ones after it (which once hid it from
+        // the visible-range search).
+        let mut c = chart();
+        c.notes = vec![Note {
+            time: 1.0,
+            string: 1,
+            fret: 3,
+            sustain: 2.0,
+            ..Note::default()
+        }];
+        c.notes.extend((0..6).map(|i| Note {
+            time: 1.2 + i as f64 * 0.1,
+            string: 0,
+            fret: 1,
+            ..Note::default()
+        }));
+        c.chords.clear();
+        let cr: Vec<Option<bool>> = vec![];
+        let opts = Options::default();
+        for res in [None, Some(true), Some(false)] {
+            let mut nr = vec![None; c.notes.len()];
+            nr[0] = res;
+            let mut out = Batches::default();
+            let f = Frame {
+                chart: &c,
+                note_res: &nr,
+                chord_res: &cr,
+                t: 2.0, // one second into a two-second note
+                cam_x: 4.0,
+                width: 1280.0,
+                height: 720.0,
+                dpr: 1.0,
+                effects: &[],
+                hud: Hud::default(),
+                section: "",
+                density: &[],
+            };
+            build(&f, &opts, &Font::default(), &mut out);
+            let r = ribbons(&out);
+            assert_eq!(r.len(), 1, "{res:?}: {r:?}");
+            let (alpha, near, far) = r[0];
+            assert!(alpha > 0.2, "{res:?}: tail faded to {alpha}");
+            // Runs from the hit line out to one second's travel away.
+            assert!(near.abs() < 0.05, "{res:?}: near end at {near}");
+            assert!((far + opts.speed).abs() < 0.05, "{res:?}: far end at {far}");
+            // After the note ends, nothing is left.
+            build(&Frame { t: 3.5, ..f }, &opts, &Font::default(), &mut out);
+            assert!(ribbons(&out).is_empty());
+        }
     }
 
     #[test]
