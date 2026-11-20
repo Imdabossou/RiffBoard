@@ -47,13 +47,13 @@ pub fn is_allowed(method: &Method, path: &str) -> bool {
     }
     let nonempty = |prefix: &str| path.strip_prefix(prefix).is_some_and(|r| !r.is_empty());
     if nonempty("/static/")
-        || nonempty("/ws/highway/")
+        || nonempty("/api/chart/")
         || nonempty("/api/song/")
         || nonempty("/api/scores/")
     {
         return true;
     }
-    if let Some(rest) = path.strip_prefix("/api/sloppak/") {
+    if let Some(rest) = path.strip_prefix("/api/pack/") {
         return PACK_SUFFIXES
             .iter()
             .any(|s| rest.contains(&format!("{s}/file/")));
@@ -158,12 +158,12 @@ mod tests {
             (&g, "/api/library"),
             (&g, "/api/song/A/b.feedpak"),
             (&g, "/api/song/a/b.feedpak/art"),
-            (&g, "/api/sloppak/a.feedpak/file/stems/full.ogg"),
+            (&g, "/api/pack/a.feedpak/file/stems/full.ogg"),
             (&g, "/api/scores/a.feedpak"),
             (&g, "/api/leaderboards"),
             (&p, "/api/runs"),
             (&p, "/api/scores"),
-            (&g, "/ws/highway/a/b.feedpak"),
+            (&g, "/api/chart/a/b.feedpak"),
             (&g, "/api/site"),
             (&g, "/site.css"),
             (&g, "/site/logo.png"),
@@ -194,8 +194,12 @@ mod tests {
             (&g, "/api/startup-status"),
             (&g, "/api/scan-status"),
             (&g, "/static/"),
-            (&g, "/ws/highway/"),
-            (&g, "/api/sloppak/a.zip/file/x"),
+            (&g, "/api/chart/"),
+            (&g, "/api/pack/a.zip/file/x"),
+            (&p, "/api/chart/a.feedpak"),
+            // The old frontend's routes are gone.
+            (&g, "/ws/highway/a/b.feedpak"),
+            (&g, "/api/sloppak/a.feedpak/file/stems/full.ogg"),
             (&g, "/api/song/%2E%2E%2Fetc%2Fpasswd"),
             (&g, "/site/site.json"),
             (&g, "/site/logo.svg"),

@@ -30,7 +30,7 @@ RiffBoard started as a fork of [fee[dB]ack](https://github.com/got-feedback/feed
 
 Upstream fee[dB]ack exposes about 120 unauthenticated endpoints that change server state: settings, uploads, deletes, plugin updates, metadata scraping. That's fine on a LAN and dangerous anywhere else. RiffBoard's server works the other way round:
 
-- **Allowlist, not blocklist.** Every request passes through [`src/guard.rs`](src/guard.rs). Only listed method and path pairs are served; anything else is a 404 before any route code runs. That includes WebSockets. The whole public surface is a dozen routes.
+- **Allowlist, not blocklist.** Every request passes through [`src/guard.rs`](src/guard.rs). Only listed method and path pairs are served; anything else is a 404 before any route code runs. The whole public surface is a dozen routes.
 - **Read-only library.** The only writes a visitor can make are "start a run" and "post a score". The library folder is never written to. The image runs as a non-root user and works with a read-only root filesystem.
 - **Score checks.** Scores are computed by the server from hit/miss counts, with the same rules code the game uses ([`crates/core/src/rules.rs`](crates/core/src/rules.rs)). A run needs a ticket issued when the song starts, and is only accepted from the same visitor after the chart's length has passed in real time. Hit counts must fit the chart. Both writes are rate-limited per visitor, names are normalised, and the operator can ban names.
 - **Locked-down page.** The game page sends a strict Content-Security-Policy: scripts, styles and media only from the site itself, no inline scripts, no framing. There are no analytics, trackers, CDNs or third-party requests of any kind; the font is self-hosted.
@@ -109,7 +109,7 @@ You'll need Rust (stable, edition 2024) with the `wasm32-unknown-unknown` target
 bash scripts/build-game.sh                    # builds the game into static/game/pkg/
 DLC_DIR=./library CONFIG_DIR=./.config cargo run      # serves http://localhost:8000
 
-cargo test --workspace                        # unit tests + end-to-end replay of tests/golden
+cargo test --workspace                        # unit tests + end-to-end tests against the real server
 cargo clippy -p riffboard-game --target wasm32-unknown-unknown -- -D warnings
 ```
 
@@ -122,7 +122,7 @@ The project is a Cargo workspace:
 | `crates/game` | The browser game: WebGL2 renderer, highway layout, camera, HUD. Compiled to wasm. |
 | `static/game/` | The page around it: menus in plain HTML, Web Audio playback and the song clock (`player.js`), and the microphone worklet. No build step. |
 
-To check the detector against a recording, run `cargo run -p riffboard-core --example detect_bench --release -- chart.json song.f32` (see the file for details). `tests/golden/golden.json` holds library and chart responses recorded from the original Python server, and `cargo test` checks the Rust server still matches them. [CLAUDE.md](CLAUDE.md) has a fuller map.
+To check the detector against a recording, run `cargo run -p riffboard-core --example detect_bench --release -- chart.json song.f32` (see the file for details; `chart.json` is what `/api/chart/<song>` returns). [CLAUDE.md](CLAUDE.md) has a fuller map.
 
 ## Licence
 

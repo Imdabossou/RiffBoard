@@ -25,10 +25,10 @@ impl Game {
         })
     }
 
-    /// Loads a chart from the highway messages (a JSON array). Returns a JSON
-    /// summary: title, artist, duration, judgeable, last_event, arrangements.
-    pub fn load(&mut self, messages_json: &str) -> Result<String, JsValue> {
-        let chart = Chart::from_json(messages_json).map_err(|e| JsValue::from_str(&e))?;
+    /// Loads a chart (`GET /api/chart/...`). Returns a JSON summary: title,
+    /// artist, duration, judgeable, first/last event, audio and sections.
+    pub fn load(&mut self, chart_json: &str) -> Result<String, JsValue> {
+        let chart = Chart::from_json(chart_json).map_err(|e| JsValue::from_str(&e))?;
         let summary = serde_json::json!({
             "title": chart.title,
             "artist": chart.artist,

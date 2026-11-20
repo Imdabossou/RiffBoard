@@ -15,7 +15,7 @@ const encPath = (f) => f.split('/').map(encodeURIComponent).join('/');
 const artUrl = (f) => `/api/song/${encPath(f)}/art`;
 const fmtTime = (s) => { s = Math.max(0, Math.round(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const pct = (a) => `${Math.round((a || 0) * 100)}%`;
-const armName = (a) => a.smart_name || a.name || `Part ${a.index + 1}`;
+const armName = (a) => a.name || `Part ${a.index + 1}`;
 
 async function getJSON(url, opts) {
   const r = await fetch(url, opts);
@@ -136,7 +136,7 @@ async function libraryPage() {
     </div>`;
   $('#start').addEventListener('click', (e) => { e.preventDefault(); $('#songs').scrollIntoView({ behavior: 'smooth' }); $('#q').focus({ preventScroll: true }); });
   try {
-    libraryCache ||= (await getJSON('/api/library?size=100&sort=artist')).songs || [];
+    libraryCache ||= (await getJSON('/api/library')).songs || [];
   } catch (e) {
     $('#grid').innerHTML = `<p class="error">${esc(e.message)}</p>`;
     return;

@@ -2,7 +2,7 @@
 //! hit rate. Usage:
 //!   ffmpeg -i song.ogg -ac 1 -ar 48000 -f f32le song.f32
 //!   cargo run -p riffboard-core --example detect_bench --release -- chart.json song.f32 [offset_s] [level]
-//! `chart.json` is the highway messages as a JSON array.
+//! `chart.json` is a chart as the server sends it (`GET /api/chart/<song>`).
 
 use riffboard_core::chart::Chart;
 use riffboard_core::detect::{Detector, Sensitivity};

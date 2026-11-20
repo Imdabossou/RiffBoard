@@ -1,4 +1,4 @@
-//! HTTP + WebSocket routes.
+//! HTTP routes.
 
 use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
@@ -8,7 +8,6 @@ use std::time::{Duration, Instant};
 
 use axum::Router;
 use axum::body::Body;
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, Path, Query, Request, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Json, Response};
@@ -16,20 +15,23 @@ use axum::routing::{get, post};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tower::ServiceExt;
+use tower_http::compression::CompressionLayer;
+use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::chart::{self, Loaded};
+use riffboard_core::chart::Chart;
+
+use crate::chart;
 use crate::config::Config;
-use crate::library::{self, Filters, Index};
+use crate::library::{self, Index};
 use crate::pack::{self, UnpackCache};
 use crate::store::{self, Store};
-use crate::util::{self, num, round_to};
-use crate::util_url::quote_component;
+use crate::util::{self, num, quote_path, round_to};
 
 // ── State ────────────────────────────────────────────────────────────────────
 
-/// (library key, mtime, size, parsed charts) — a small most-recent-first cache.
-type ChartEntry = (String, f64, u64, Arc<Loaded>);
+/// (library key, mtime, size, its arrangements) — a small most-recent-first cache.
+type ChartEntry = (String, f64, u64, Arc<Vec<Chart>>);
 
 pub struct AppState {
     pub cfg: Config,
@@ -117,14 +119,6 @@ impl AppState {
         self.index.scan(&self.cfg.dlc_dir);
     }
 
-    fn operator_config(&self) -> Value {
-        std::fs::read_to_string(self.cfg.config_dir.join("config.json"))
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .filter(Value::is_object)
-            .unwrap_or_else(|| json!({}))
-    }
-
     /// (canonical path, library key) for a request filename, or None.
     fn resolve(&self, filename: &str) -> Option<(PathBuf, String)> {
         let p = pack::resolve_in(&self.cfg.dlc_dir, filename)?;
@@ -135,8 +129,8 @@ impl AppState {
         Some((p, key))
     }
 
-    /// Parse (and cache) a pack's charts.
-    fn load(&self, key: &str, path: &FsPath) -> Option<Arc<Loaded>> {
+    /// Parse (and cache) a pack's arrangements.
+    fn load(&self, key: &str, path: &FsPath) -> Option<Arc<Vec<Chart>>> {
         let (mtime, size) = pack::stamp(path)?;
         {
             let c = self.charts.lock().unwrap();
@@ -146,7 +140,10 @@ impl AppState {
         }
         let dir = self.cache.source_dir(key, path)?;
         let manifest = pack::read_manifest(&dir)?;
-        let loaded = Arc::new(chart::load(&dir, manifest));
+        let base = format!("/api/pack/{}/file/", quote_path(key));
+        let loaded = Arc::new(chart::load(&dir, &manifest, |rel| {
+            format!("{base}{}", quote_path(rel))
+        }));
         let mut c = self.charts.lock().unwrap();
         c.retain(|e| e.0 != key);
         c.push_front((key.to_string(), mtime, size, loaded.clone()));
@@ -193,8 +190,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/site/{name}", get(site_asset))
         .route("/api/library", get(library_page))
         .route("/api/song/{*rest}", get(song))
-        .route("/api/sloppak/{*rest}", get(sloppak_file))
-        .route("/ws/highway/{*filename}", get(highway_ws))
+        .route("/api/chart/{*filename}", get(chart_json))
+        .route("/api/pack/{*rest}", get(pack_file))
         .route("/api/runs", post(start_run))
         .route("/api/scores", post(submit_score))
         .route("/api/scores/{*filename}", get(get_board))
@@ -209,6 +206,13 @@ pub fn router(state: Arc<AppState>) -> Router {
             state.clone(),
             crate::guard::middleware,
         ))
+        // JSON (charts, the library) compressed on the fly; the static files
+        // ship precompressed and audio is compressed already.
+        .layer(
+            CompressionLayer::new()
+                .gzip(true)
+                .compress_when(DefaultPredicate::new().and(NotForContentType::const_new("audio/"))),
+        )
         .with_state(state)
 }
 
@@ -305,54 +309,14 @@ async fn version(State(s): S) -> Json<Value> {
 
 // ── Library ──────────────────────────────────────────────────────────────────
 
-fn qnum(q: &HashMap<String, String>, k: &str, default: usize) -> usize {
-    q.get(k)
-        .and_then(|v| v.parse::<i64>().ok())
-        .map_or(default, |v| v.max(0) as usize)
-}
-
-fn provider_ok(q: &HashMap<String, String>) -> Result<(), Box<Response>> {
-    match q.get("provider").map(String::as_str) {
-        None | Some("local") => Ok(()),
-        Some(p) => Err(Box::new(
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({"detail": format!("Unknown library provider: {p}")})),
-            )
-                .into_response(),
-        )),
-    }
-}
-
-async fn library_page(State(s): S, Query(q): Query<HashMap<String, String>>) -> Response {
-    if let Err(r) = provider_ok(&q) {
-        return *r;
-    }
-    let f = Filters::from_query(&q);
-    let size = qnum(&q, "size", 24).min(100);
-    let group = q.get("group").is_some_and(|g| g != "0" && !g.is_empty());
-    let sort = q.get("sort").map_or("artist", String::as_str);
-    let dir = q.get("dir").map_or("asc", String::as_str);
-    Json(library::query_page(
-        &s.index.all(),
-        &f,
-        sort,
-        dir,
-        qnum(&q, "page", 0),
-        size,
-        group,
-    ))
-    .into_response()
+async fn library_page(State(s): S) -> Response {
+    let songs: Vec<Value> = s.index.all().iter().map(library::Song::row).collect();
+    Json(json!({ "songs": songs })).into_response()
 }
 
 // ── Songs ────────────────────────────────────────────────────────────────────
 
-async fn song(
-    State(s): S,
-    Path(rest): Path<String>,
-    Query(q): Query<HashMap<String, String>>,
-    headers: HeaderMap,
-) -> Response {
+async fn song(State(s): S, Path(rest): Path<String>, headers: HeaderMap) -> Response {
     if let Some(f) = rest
         .strip_suffix("/art")
         .filter(|f| pack::is_pack(FsPath::new(f)))
@@ -365,46 +329,15 @@ async fn song(
     let meta = match s.index.get(&key) {
         Some(m) => m,
         None => {
-            let Some((mtime, size)) = pack::stamp(&path) else {
-                return err(StatusCode::NOT_FOUND, "File not found");
-            };
-            let Some(manifest) = pack::read_manifest(&path) else {
+            let Some(((mtime, size), manifest)) =
+                pack::stamp(&path).zip(pack::read_manifest(&path))
+            else {
                 return err(StatusCode::NOT_FOUND, "File not found");
             };
             library::extract(&key, &manifest, mtime, size)
         }
     };
-    let mut out = library::song_info(&meta);
-    if q.get("stems").is_some_and(|v| v != "0") {
-        let (stems, full) = match s.load(&key, &path) {
-            Some(l) => {
-                let url = |rel: &str| {
-                    format!(
-                        "/api/sloppak/{}/file/{}",
-                        quote_component(&key),
-                        crate::util_url::quote_path(rel)
-                    )
-                };
-                let stems: Vec<Value> = l
-                    .stems
-                    .iter()
-                    .map(|st| {
-                        let mut o = serde_json::Map::new();
-                        o.insert("id".into(), json!(st.id));
-                        o.insert("url".into(), json!(url(&st.file)));
-                        o.insert("default".into(), json!(st.default));
-                        o.extend(st.extra.clone());
-                        Value::Object(o)
-                    })
-                    .collect();
-                (stems, l.full_mix.as_deref().map(url))
-            }
-            None => (vec![], None),
-        };
-        out.insert("stems".into(), json!(stems));
-        out.insert("full_mix_url".into(), json!(full));
-    }
-    Json(Value::Object(out)).into_response()
+    Json(meta.details()).into_response()
 }
 
 fn art(s: &AppState, filename: &str, headers: &HeaderMap) -> Response {
@@ -444,7 +377,7 @@ fn art(s: &AppState, filename: &str, headers: &HeaderMap) -> Response {
         .into_response()
 }
 
-async fn sloppak_file(State(s): S, Path(rest): Path<String>, req: Request) -> Response {
+async fn pack_file(State(s): S, Path(rest): Path<String>, req: Request) -> Response {
     let split = pack::PACK_EXTS
         .iter()
         .filter_map(|ext| {
@@ -474,89 +407,39 @@ async fn sloppak_file(State(s): S, Path(rest): Path<String>, req: Request) -> Re
     }
 }
 
-// ── Plugins ──────────────────────────────────────────────────────────────────
+// ── Charts ───────────────────────────────────────────────────────────────────
 
-// ── Highway WebSocket ────────────────────────────────────────────────────────
-
-async fn highway_ws(
+/// One arrangement as the game plays it. Without `?arrangement=` it is the
+/// one with the most notes.
+async fn chart_json(
     State(s): S,
     Path(filename): Path<String>,
     Query(q): Query<HashMap<String, String>>,
-    ws: WebSocketUpgrade,
 ) -> Response {
-    let arrangement = q
-        .get("arrangement")
-        .and_then(|a| a.parse::<i64>().ok())
-        .unwrap_or(-1);
-    let naming = q
-        .get("naming_mode")
-        .cloned()
-        .unwrap_or_else(|| "legacy".into());
-    ws.max_message_size(64 * 1024)
-        .on_upgrade(move |sock| stream_chart(s, sock, filename, arrangement, naming))
-}
-
-async fn send(sock: &mut WebSocket, v: &Value) -> bool {
-    sock.send(Message::Text(v.to_string().into())).await.is_ok()
-}
-
-async fn stream_chart(
-    s: Arc<AppState>,
-    mut sock: WebSocket,
-    filename: String,
-    arrangement: i64,
-    naming: String,
-) {
     let Some((path, key)) = s.resolve(&filename) else {
-        let msg = if pack::resolve_in(&s.cfg.dlc_dir, &filename).is_some() {
-            "forbidden"
-        } else {
-            "File not found"
-        };
-        let _ = send(&mut sock, &json!({"error": msg})).await;
-        let _ = sock.send(Message::Close(None)).await;
-        return;
+        return err(StatusCode::NOT_FOUND, "File not found");
     };
-    if !send(
-        &mut sock,
-        &json!({"type": "loading", "stage": "Extracting..."}),
-    )
-    .await
-    {
-        return;
-    }
     let st = s.clone();
-    let k = key.clone();
-    let mut task = tokio::task::spawn_blocking(move || st.load(&k, &path));
-    let loaded = loop {
-        tokio::select! {
-            res = &mut task => break res.ok().flatten(),
-            () = tokio::time::sleep(Duration::from_secs(3)) => {
-                if !send(&mut sock, &json!({"type": "loading", "stage": "Loading..."})).await { return; }
-            }
-        }
+    let charts = tokio::task::spawn_blocking(move || st.load(&key, &path))
+        .await
+        .ok()
+        .flatten();
+    let Some(charts) = charts.filter(|c| !c.is_empty()) else {
+        return err(StatusCode::NOT_FOUND, "This song has no playable parts");
     };
-    let Some(song) = loaded else {
-        let _ = send(&mut sock, &json!({"error": "Could not read this song"})).await;
-        let _ = sock.send(Message::Close(None)).await;
-        return;
+    let pick = match q.get("arrangement").and_then(|a| a.parse::<usize>().ok()) {
+        Some(i) => charts.get(i),
+        None => charts.iter().max_by_key(|c| c.judgeable()),
     };
-    if song.arrangements.is_empty() {
-        let _ = send(&mut sock, &json!({"error": "No arrangements found"})).await;
-        let _ = sock.send(Message::Close(None)).await;
-        return;
-    }
-    let sel = chart::select(&song, arrangement, &naming, &s.operator_config());
-    for m in chart::highway_messages(&song, &sel, &key, &naming) {
-        if !send(&mut sock, &m).await {
-            return;
-        }
-    }
-    // Stay open (the client keeps the socket for the session); ignore input.
-    while let Some(Ok(msg)) = sock.recv().await {
-        if matches!(msg, Message::Close(_)) {
-            break;
-        }
+    let Some(c) = pick else {
+        return err(StatusCode::NOT_FOUND, "No such part");
+    };
+    match serde_json::to_string(c) {
+        Ok(body) => no_cache(([(header::CONTENT_TYPE, "application/json")], body).into_response()),
+        Err(_) => err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "could not send the chart",
+        ),
     }
 }
 
@@ -575,11 +458,11 @@ fn count(v: Option<&Value>) -> Option<i64> {
     .filter(|x| (0..=1_000_000).contains(x))
 }
 
-/// (judgeable notes, last note time) of one arrangement.
+/// (judgeable notes, last note time) of one arrangement; None if it has no notes.
 fn facts(s: &AppState, key: &str, path: &FsPath, arrangement: i64) -> Option<(usize, f64)> {
-    let song = s.load(key, path)?;
-    let a = song.arrangements.get(usize::try_from(arrangement).ok()?)?;
-    Some((chart::judgeable(a), chart::last_event_time(a)?))
+    let charts = s.load(key, path)?;
+    let c = charts.get(usize::try_from(arrangement).ok()?)?;
+    (c.judgeable() > 0).then(|| (c.judgeable(), c.last_event_time()))
 }
 
 async fn start_run(
@@ -761,12 +644,11 @@ async fn leaderboards(State(s): S) -> Json<Value> {
     let songs = s.index.all();
     let mut boards: Vec<Value> = s.store.summary().into_iter().filter_map(|(fn_, arr, runs, top, top_name)| {
         let song = songs.iter().find(|x| x.filename == fn_)?;
-        let arr_name = song.arrangements.iter().find(|a| a["index"] == arr)
-            .and_then(|a| a["name"].as_str()).unwrap_or("").to_string();
+        let arr_name = usize::try_from(arr).ok().and_then(|i| song.arrangements.get(i)).cloned().unwrap_or_default();
         Some(json!({
             "filename": fn_, "arrangement": arr, "runs": runs, "top_score": top, "top_name": top_name,
             "title": song.title, "artist": song.artist, "arrangement_name": arr_name,
-            "art_url": format!("/api/song/{}/art", crate::util_url::quote_path(&fn_)),
+            "art_url": format!("/api/song/{}/art", quote_path(&fn_)),
         }))
     }).collect();
     boards.sort_by(|a, b| {

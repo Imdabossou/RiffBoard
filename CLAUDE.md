@@ -9,14 +9,14 @@ It began as a fork of fee[dB]ack. The server was rewritten in Rust (0.2), and in
 ```
 src/main.rs        startup, background rescans, `riffboard admin` / `healthcheck` subcommands
 src/guard.rs       THE allowlist middleware + security headers + client_ip() + admin check
-src/web.rs         every route, the game page CSP, the highway WebSocket, runs/scores checks
+src/web.rs         every route, the game page CSP, the chart route, runs/scores checks
 src/library.rs     in-memory library index (manifest-only scan) + library queries
-src/chart.rs       feedpak -> chart model -> highway WebSocket messages (wire format)
+src/chart.rs       feedpak -> riffboard_core::chart::Chart per arrangement (stems, lyrics, timeline)
 src/pack.rs        path containment, manifests, cover art, zip unpack cache
 src/site.rs        band branding: CONFIG_DIR/site/site.json -> /api/site, /site.css, /site/<img>
 src/store.rs       leaderboard SQLite (CONFIG_DIR/leaderboard.db)
 src/admin.rs       operator CLI (talks to loopback-only /api/admin/*)
-crates/core/       shared game rules (no I/O, native tests): chart.rs (messages -> typed chart),
+crates/core/       shared game rules (no I/O, native tests): chart.rs (the chart model + its JSON),
                    judge.rs (events + tally), rules.rs (score formula + leaderboard checks, used by
                    the server), detect.rs + fft.rs (mic note detector), pitch.rs
 crates/core/examples/detect_bench.rs   detector against a recording or a synthesized take
@@ -27,7 +27,7 @@ static/game/       the page: index.html, app.js (menus/router), player.js (Web A
                    mic, frame loop), mic-worklet.js, app.css, theme.js; pkg/ = build output (ignored)
 static/brand/      RiffBoard icon and default hero image; static/fonts/ = Rubik (opt-in)
 scripts/build-game.sh   builds crates/game into static/game/pkg (Docker runs it too)
-tests/server.rs    end-to-end tests against the real binary; replays tests/golden/golden.json
+tests/server.rs    end-to-end tests against the real binary (library, charts, audio, guard, scores)
 tests/fixtures/    fixture feedpak library (make_fixtures.py rebuilds it)
 ```
 
@@ -42,7 +42,7 @@ tests/fixtures/    fixture feedpak library (make_fixtures.py rebuilds it)
 7. **Untrusted text is escaped** (`esc()` in `app.js`) before it goes into HTML. Names are normalised server-side by `store::clean_name`.
 8. **Light + dark themes** for the menus: colours are `--fb-*` "R G B" variables in `app.css`, overridden by `/site.css`; the default is monochrome with the system `AccentColor` when unbranded. The game screen (`#play`) is always dark.
 9. **Shared rules live in `crates/core`.** The score formula and run checks are one function used by both the server and the game; never re-implement them in JavaScript.
-10. **Wire compatibility.** The game reads the highway WebSocket messages `src/chart.rs` builds; `tests/golden/golden.json` pins them. If a message must change, change `crates/core/src/chart.rs` with it and re-record deliberately.
+10. **One chart model.** `riffboard_core::chart::Chart` is what the server builds from a pack (`Chart::from_pack` + `finish`) and what the game reads (`GET /api/chart/<song>?arrangement=N`, serde JSON). Add a field there and both sides have it; don't add a second format.
 
 ## Smoothness rules (the reason the engine exists)
 

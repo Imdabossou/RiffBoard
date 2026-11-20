@@ -14,25 +14,16 @@ export function loadWasm() {
   return wasmReady;
 }
 
-/** Streams the highway WebSocket into an array of messages. */
-export function fetchChart(filename, arrangement, onStage) {
-  return new Promise((resolve, reject) => {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/ws/highway/${encodeURIComponent(filename)}?arrangement=${arrangement}`;
-    const ws = new WebSocket(url);
-    const msgs = [];
-    let done = false;
-    ws.onmessage = (e) => {
-      let m;
-      try { m = JSON.parse(e.data); } catch { return; }
-      if (m.error) { done = true; ws.close(); reject(new Error(m.error)); return; }
-      if (m.type === 'loading') { onStage?.(m.stage); return; }
-      msgs.push(m);
-      if (m.type === 'ready') { done = true; ws.close(); resolve(msgs); }
-    };
-    ws.onerror = () => { if (!done) reject(new Error('Could not load the chart')); };
-    ws.onclose = () => { if (!done) reject(new Error('The chart stream closed early')); };
-  });
+/** Fetches one arrangement's chart (JSON text, parsed by the game). */
+export async function fetchChart(filename, arrangement) {
+  const path = filename.split('/').map(encodeURIComponent).join('/');
+  const r = await fetch(`/api/chart/${path}?arrangement=${encodeURIComponent(arrangement)}`);
+  if (!r.ok) {
+    let msg = 'Could not load the chart';
+    try { msg = (await r.json()).error || msg; } catch { /* not JSON */ }
+    throw new Error(msg);
+  }
+  return r.text();
 }
 
 /**
@@ -119,8 +110,7 @@ export class Session {
     await loadWasm();
     this.game = new Game(this.canvas);
     onStage('Loading the chart');
-    const msgs = await fetchChart(filename, arrangement, onStage);
-    this.info = JSON.parse(this.game.load(JSON.stringify(msgs)));
+    this.info = JSON.parse(this.game.load(await fetchChart(filename, arrangement)));
     this.game.set_speed(this.opts.speed);
     this.game.set_low_string_bottom(!!this.opts.lowStringBottom);
     this.game.set_lefty(!!this.opts.lefty);

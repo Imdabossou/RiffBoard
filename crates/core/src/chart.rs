@@ -1,54 +1,90 @@
-//! The chart as the game uses it, built from the highway WebSocket messages
-//! (`song_info`, `beats`, `sections`, `anchors`, `chord_templates`, `notes`,
-//! `chords`, ... `ready`). Unknown fields and message types are ignored, and
-//! malformed values fall back to defaults, so a bad pack never breaks the game.
+//! The chart model shared by the server and the game.
+//!
+//! The server reads a pack's arrangement file with [`Chart::from_pack`]
+//! (lenient: malformed values fall back to defaults, so a bad pack never
+//! breaks the game), fills in the song-level parts (title, audio, beats,
+//! lyrics), calls [`Chart::finish`] and sends the result as JSON. The game
+//! reads that JSON back with [`Chart::from_json`].
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+fn is_zero(x: &f64) -> bool {
+    *x == 0.0
+}
+
+/// One note. Field names on the wire follow the pack format (`t`, `s`, `f`,
+/// `sus`, ...) and default values are left out, which keeps a chart small.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Note {
+    #[serde(rename = "t")]
     pub time: f64,
+    #[serde(rename = "s")]
     pub string: usize,
+    #[serde(rename = "f")]
     pub fret: i32,
+    #[serde(rename = "sus", skip_serializing_if = "is_zero")]
     pub sustain: f64,
     /// Fret a slide ends on, if any.
+    #[serde(rename = "sl", skip_serializing_if = "Option::is_none")]
     pub slide_to: Option<i32>,
     /// Bend in semitones (0 = none).
+    #[serde(rename = "bn", skip_serializing_if = "is_zero")]
     pub bend: f64,
+    #[serde(rename = "ho", skip_serializing_if = "is_false")]
     pub hammer_on: bool,
+    #[serde(rename = "po", skip_serializing_if = "is_false")]
     pub pull_off: bool,
+    #[serde(rename = "hm", skip_serializing_if = "is_false")]
     pub harmonic: bool,
+    #[serde(rename = "pm", skip_serializing_if = "is_false")]
     pub palm_mute: bool,
+    #[serde(rename = "mt", skip_serializing_if = "is_false")]
     pub mute: bool,
+    #[serde(rename = "tr", skip_serializing_if = "is_false")]
     pub tremolo: bool,
+    #[serde(rename = "ac", skip_serializing_if = "is_false")]
     pub accent: bool,
+    #[serde(rename = "tp", skip_serializing_if = "is_false")]
     pub tap: bool,
+    #[serde(rename = "vb", skip_serializing_if = "is_false")]
     pub vibrato: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Chord {
+    #[serde(rename = "t")]
     pub time: f64,
+    /// Index into [`Chart::chord_names`].
+    #[serde(rename = "id")]
     pub template: usize,
     pub notes: Vec<Note>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Beat {
     pub time: f64,
     /// Bar number on the first beat of a bar, else `None`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub measure: Option<i64>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Anchor {
     pub time: f64,
     pub fret: i32,
     pub width: i32,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Section {
     pub time: f64,
     pub name: String,
@@ -56,21 +92,23 @@ pub struct Section {
 
 /// One sung word (or syllable). `text` already ends with a space unless the
 /// next syllable joins on.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct LyricWord {
     pub time: f64,
     pub dur: f64,
     pub text: String,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct LyricLine {
     pub start: f64,
     pub end: f64,
     pub words: Vec<LyricWord>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Stem {
     pub id: String,
@@ -78,23 +116,15 @@ pub struct Stem {
     pub default: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct ArrangementInfo {
-    pub index: i64,
-    pub name: String,
-    pub smart_name: Option<String>,
-    pub notes: i64,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Chart {
     pub title: String,
     pub artist: String,
     pub duration: f64,
+    /// The arrangement's name and its index in the song.
     pub arrangement: String,
-    pub arrangement_index: i64,
-    pub arrangements: Vec<ArrangementInfo>,
+    pub arrangement_index: usize,
     pub audio_url: Option<String>,
     pub stems: Vec<Stem>,
     /// Semitone offset of each string from standard, lowest string first.
@@ -116,7 +146,7 @@ pub struct Chart {
 /// Groups lyric events into lines: a word ending in `+` ends its line, as
 /// does a pause of more than three seconds. A trailing `-` joins the next
 /// syllable without a space.
-fn lyric_lines(events: &[Value]) -> Vec<LyricLine> {
+pub fn lyric_lines(events: &[Value]) -> Vec<LyricLine> {
     let mut words: Vec<(f64, f64, String)> = events
         .iter()
         .filter_map(|v| {
@@ -192,8 +222,8 @@ fn s(v: &Value, k: &str) -> String {
     v.get(k).and_then(Value::as_str).unwrap_or("").to_string()
 }
 
-fn data(v: &Value) -> &[Value] {
-    v.get("data")
+fn arr<'a>(v: &'a Value, k: &str) -> &'a [Value] {
+    v.get(k)
         .and_then(Value::as_array)
         .map_or(&[], Vec::as_slice)
 }
@@ -223,96 +253,125 @@ fn note(v: &Value, time: f64) -> Note {
     }
 }
 
+/// Beats from a pack (`measure` -1 means "not the first beat of a bar").
+pub fn beats(v: &[Value]) -> Vec<Beat> {
+    v.iter()
+        .filter(|b| b.is_object())
+        .map(|b| Beat {
+            time: f(b, "time"),
+            measure: Some(i(b, "measure", -1)).filter(|x| *x >= 0),
+        })
+        .collect()
+}
+
+/// Sections from a pack (`time`, or upstream's `start_time`).
+pub fn sections(v: &[Value]) -> Vec<Section> {
+    v.iter()
+        .filter(|x| x.is_object())
+        .map(|x| Section {
+            time: if x.get("time").is_some() {
+                f(x, "time")
+            } else {
+                f(x, "start_time")
+            },
+            name: s(x, "name").chars().take(40).collect(),
+        })
+        .collect()
+}
+
 impl Chart {
-    /// Builds a chart from the highway messages, in the order they arrived.
-    pub fn from_messages(msgs: &[Value]) -> Chart {
-        let mut c = Chart {
-            string_count: 4,
-            bass: true,
-            ..Chart::default()
-        };
-        for m in msgs {
-            match m.get("type").and_then(Value::as_str).unwrap_or("") {
-                "song_info" => {
-                    c.title = s(m, "title");
-                    c.artist = s(m, "artist");
-                    c.duration = f(m, "duration");
-                    c.arrangement = s(m, "arrangement");
-                    c.arrangement_index = i(m, "arrangement_index", 0);
-                    c.arrangements = m
-                        .get("arrangements")
-                        .and_then(|a| serde_json::from_value(a.clone()).ok())
-                        .unwrap_or_default();
-                    c.audio_url = m.get("audio_url").and_then(Value::as_str).map(String::from);
-                    c.stems = m
-                        .get("stems")
-                        .and_then(|a| serde_json::from_value(a.clone()).ok())
-                        .unwrap_or_default();
-                    c.tuning = m
-                        .get("tuning")
-                        .and_then(Value::as_array)
-                        .map(|a| {
-                            a.iter()
-                                .map(|x| x.as_f64().unwrap_or(0.0).clamp(-24.0, 24.0) as i32)
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    c.string_count = i(m, "stringCount", 4).clamp(1, 8) as usize;
-                    c.capo = i(m, "capo", 0).clamp(0, 24) as i32;
-                    c.cent_offset = f(m, "centOffset");
-                    let name = c.arrangement.to_lowercase();
-                    // The server reports at least 6 strings for anything not named bass.
-                    c.bass = name.contains("bass") || c.string_count <= 5;
-                }
-                "beats" => c.beats.extend(data(m).iter().map(|v| Beat {
-                    time: f(v, "time"),
-                    measure: Some(i(v, "measure", -1)).filter(|x| *x >= 0),
-                })),
-                "sections" => c.sections.extend(data(m).iter().map(|v| Section {
-                    time: f(v, "time"),
-                    name: s(v, "name"),
-                })),
-                "anchors" => c.anchors.extend(data(m).iter().map(|v| Anchor {
+    /// Reads one arrangement file of a pack. Song-level parts (title, audio,
+    /// lyrics) are the caller's; call [`Chart::finish`] once they are set.
+    pub fn from_pack(d: &Value) -> Chart {
+        Chart {
+            arrangement: s(d, "name"),
+            tuning: arr(d, "tuning")
+                .iter()
+                .map(|v| {
+                    v.as_f64()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(0.0)
+                        .clamp(-24.0, 24.0) as i32
+                })
+                .collect(),
+            capo: i(d, "capo", 0).clamp(0, 24) as i32,
+            cent_offset: f(d, "centOffset"),
+            beats: beats(arr(d, "beats")),
+            sections: sections(arr(d, "sections")),
+            anchors: arr(d, "anchors")
+                .iter()
+                .map(|v| Anchor {
                     time: f(v, "time"),
                     fret: i(v, "fret", 1).clamp(0, 30) as i32,
                     width: i(v, "width", 4).clamp(1, 24) as i32,
-                })),
-                "chord_templates" => c.chord_names.extend(data(m).iter().map(|v| {
+                })
+                .collect(),
+            chord_names: arr(d, "templates")
+                .iter()
+                .map(|v| {
                     let n = s(v, "displayName");
-                    if n.is_empty() { s(v, "name") } else { n }
-                })),
-                "lyrics" => c.lyrics = lyric_lines(data(m)),
-                "notes" => c.notes.extend(data(m).iter().map(|v| note(v, 0.0))),
-                "chords" => c.chords.extend(data(m).iter().map(|v| {
+                    let n = if n.is_empty() { s(v, "name") } else { n };
+                    n.chars().take(40).collect()
+                })
+                .collect(),
+            notes: arr(d, "notes").iter().map(|v| note(v, 0.0)).collect(),
+            chords: arr(d, "chords")
+                .iter()
+                .map(|v| {
                     let t = f(v, "t");
                     Chord {
                         time: t,
                         template: i(v, "id", 0).max(0) as usize,
-                        notes: v
-                            .get("notes")
-                            .and_then(Value::as_array)
-                            .map(|ns| ns.iter().map(|n| note(n, t)).collect())
-                            .unwrap_or_default(),
+                        notes: arr(v, "notes").iter().map(|n| note(n, t)).collect(),
                     }
-                })),
-                _ => {}
-            }
+                })
+                .collect(),
+            ..Chart::default()
         }
-        for n in &mut c.notes {
-            n.string = n.string.min(c.string_count - 1);
+    }
+
+    /// Settles what depends on everything else: whether it is a bass part
+    /// (`kind` is the pack's arrangement type), the string count, string
+    /// numbers in range, time order, and the hand positions.
+    pub fn finish(&mut self, kind: &str) {
+        self.bass = kind.trim().eq_ignore_ascii_case("bass")
+            || self.arrangement.to_lowercase().contains("bass");
+        let used = self
+            .notes
+            .iter()
+            .chain(self.chords.iter().flat_map(|c| &c.notes))
+            .map(|n| n.string + 1)
+            .filter(|&n| n <= 8)
+            .max()
+            .unwrap_or(0);
+        let tl = self.tuning.len();
+        self.string_count = used
+            .max(if self.bass { 4 } else { 6 })
+            .max(if tl != 6 { tl } else { 0 })
+            .clamp(1, 8);
+        let last = self.string_count - 1;
+        for n in self
+            .notes
+            .iter_mut()
+            .chain(self.chords.iter_mut().flat_map(|c| c.notes.iter_mut()))
+        {
+            n.string = n.string.min(last);
         }
-        for ch in &mut c.chords {
-            for n in &mut ch.notes {
-                n.string = n.string.min(c.string_count - 1);
-            }
+        let template_count = self.chord_names.len().max(1);
+        for c in &mut self.chords {
+            c.template = c.template.min(template_count - 1);
         }
-        c.notes.sort_by(|a, b| a.time.total_cmp(&b.time));
-        c.chords.sort_by(|a, b| a.time.total_cmp(&b.time));
-        c.beats.sort_by(|a, b| a.time.total_cmp(&b.time));
-        c.anchors.sort_by(|a, b| a.time.total_cmp(&b.time));
-        c.sections.sort_by(|a, b| a.time.total_cmp(&b.time));
-        c.anchors = c.hand_positions();
-        c
+        self.notes.sort_by(|a, b| a.time.total_cmp(&b.time));
+        self.chords.sort_by(|a, b| a.time.total_cmp(&b.time));
+        self.beats.sort_by(|a, b| a.time.total_cmp(&b.time));
+        self.anchors.sort_by(|a, b| a.time.total_cmp(&b.time));
+        self.sections.sort_by(|a, b| a.time.total_cmp(&b.time));
+        self.anchors = self.hand_positions();
+    }
+
+    /// Reads a chart the server sent.
+    pub fn from_json(json: &str) -> Result<Chart, String> {
+        serde_json::from_str(json).map_err(|e| e.to_string())
     }
 
     /// Where the fretting hand sits through the song, worked out from the
@@ -388,19 +447,6 @@ impl Chart {
         out
     }
 
-    /// Parses a JSON array of highway messages.
-    pub fn from_json(json: &str) -> Result<Chart, String> {
-        let v: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
-        let arr = v.as_array().ok_or("expected an array of messages")?;
-        if let Some(e) = arr
-            .iter()
-            .find_map(|m| m.get("error").and_then(Value::as_str))
-        {
-            return Err(e.to_string());
-        }
-        Ok(Chart::from_messages(arr))
-    }
-
     /// Notes + chords: the number of events the leaderboard judges.
     pub fn judgeable(&self) -> usize {
         self.notes.len() + self.chords.len()
@@ -445,27 +491,26 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn sample() -> Vec<Value> {
-        vec![
-            json!({"type": "loading", "stage": "x"}),
-            json!({"type": "song_info", "title": "T", "artist": "A", "duration": 10.0,
-                "arrangement": "Bass", "arrangement_index": 0,
-                "arrangements": [{"index": 0, "name": "Bass", "smart_name": null, "notes": 3}],
-                "audio_url": "/a.ogg", "stems": [{"id": "full", "url": "/a.ogg", "default": true}],
-                "tuning": [-2, 0, 0, 0], "stringCount": 4, "capo": 0, "centOffset": 0}),
-            json!({"type": "beats", "data": [{"time": 0, "measure": 1}, {"time": 0.5, "measure": -1}]}),
-            json!({"type": "anchors", "data": [{"time": 0, "fret": 3, "width": 4}, {"time": 5, "fret": 7, "width": 4}]}),
-            json!({"type": "notes", "data": [{"t": 2, "s": 0, "f": 0, "sus": 0}, {"t": 1, "s": 9, "f": 3, "sl": 5, "pm": true}], "total": 2}),
-            json!({"type": "chords", "data": [{"t": 3, "id": 0, "notes": [{"s": 0, "f": 2}, {"s": 1, "f": 4}]}], "total": 1}),
-            json!({"type": "ready"}),
-        ]
+    fn sample() -> Chart {
+        let mut c = Chart::from_pack(&json!({
+            "name": "Bass", "tuning": [-2, 0, 0, 0], "capo": 0,
+            "beats": [{"time": 0, "measure": 1}, {"time": 0.5, "measure": -1}],
+            "anchors": [{"time": 0, "fret": 3, "width": 4}, {"time": 5, "fret": 7, "width": 4}],
+            "templates": [{"name": "G5", "displayName": ""}],
+            "notes": [{"t": 2, "s": 0, "f": 0, "sus": 0}, {"t": 1, "s": 9, "f": 3, "sl": 5, "pm": true}],
+            "chords": [{"t": 3, "id": 4, "notes": [{"s": 0, "f": 2}, {"s": 1, "f": 4}]}],
+        }));
+        c.title = "T".into();
+        c.finish("bass");
+        c
     }
 
     #[test]
-    fn parses_messages() {
-        let c = Chart::from_messages(&sample());
-        assert_eq!(c.title, "T");
+    fn reads_a_pack() {
+        let c = sample();
+        assert_eq!(c.arrangement, "Bass");
         assert!(c.bass);
+        assert_eq!(c.string_count, 4);
         assert_eq!(c.tuning, vec![-2, 0, 0, 0]);
         assert_eq!(c.notes.len(), 2);
         // Sorted by time; an out-of-range string is clamped.
@@ -474,10 +519,12 @@ mod tests {
         assert_eq!(c.notes[0].slide_to, Some(5));
         assert!(c.notes[0].palm_mute);
         assert_eq!(c.chords[0].notes[1].time, 3.0);
+        assert_eq!(c.chords[0].template, 0, "template id clamped");
+        assert_eq!(c.chord_names, vec!["G5"]);
         assert_eq!(c.judgeable(), 3);
         assert_eq!(c.last_event_time(), 3.0);
-        // Hand positions come from the notes: fret 3 then a 2-4 chord fit one
-        // window from fret 2; the authored move to fret 7 has no notes.
+        // Hand positions come from the notes: fret 3 (sliding to 5) then a
+        // 2-4 chord fit one window from fret 2; the authored 7 has no notes.
         assert_eq!(c.anchor_at(1.0).fret, 2);
         assert_eq!(c.anchor_at(6.0).fret, 2);
         assert_eq!(c.beats[0].measure, Some(1));
@@ -486,16 +533,35 @@ mod tests {
         assert_eq!(c.midi(&c.notes[1]), 26);
     }
 
+    #[test]
+    fn wire_round_trip_is_small_and_exact() {
+        let c = sample();
+        let json = serde_json::to_string(&c).unwrap();
+        assert_eq!(Chart::from_json(&json).unwrap(), c);
+        // Defaults are left out of notes.
+        assert!(json.contains(r#"{"t":2.0,"s":0,"f":0}"#), "{json}");
+        assert!(!json.contains("\"ho\""), "{json}");
+    }
+
+    #[test]
+    fn guitar_and_string_counts() {
+        let mut c = Chart::from_pack(&json!({"name": "Lead", "notes": [{"t": 1, "s": 2, "f": 5}]}));
+        c.finish("guitar");
+        assert!(!c.bass);
+        assert_eq!(c.string_count, 6);
+        let mut b = Chart::from_pack(&json!({"name": "Part", "tuning": [0, 0, 0, 0, 0]}));
+        b.finish("bass");
+        assert_eq!(b.string_count, 5, "five-string bass");
+    }
+
     fn hand_chart(anchors: Value, frets: &[(f64, i32)]) -> Chart {
         let notes: Vec<Value> = frets
             .iter()
             .map(|(t, f)| json!({"t": t, "s": 0, "f": f}))
             .collect();
-        Chart::from_messages(&[
-            json!({"type": "song_info", "stringCount": 4, "arrangement": "Bass"}),
-            json!({"type": "anchors", "data": anchors}),
-            json!({"type": "notes", "data": notes}),
-        ])
+        let mut c = Chart::from_pack(&json!({"name": "Bass", "anchors": anchors, "notes": notes}));
+        c.finish("bass");
+        c
     }
 
     #[test]
@@ -536,31 +602,37 @@ mod tests {
 
     #[test]
     fn lyrics_become_lines() {
-        let c = Chart::from_messages(&[json!({"type": "lyrics", "data": [
-            {"t": 1, "d": 0.4, "w": "Hel-"}, {"t": 1.4, "d": 0.4, "w": "lo+"},
-            {"t": 2, "d": 0.5, "w": "big"}, {"t": 2.5, "d": 0.5, "w": "world"},
-            {"t": 9, "d": 0.5, "w": "later"}]})]);
-        assert_eq!(c.lyrics.len(), 3);
+        let lines = lyric_lines(&[
+            json!({"t": 1, "d": 0.4, "w": "Hel-"}),
+            json!({"t": 1.4, "d": 0.4, "w": "lo+"}),
+            json!({"t": 2, "d": 0.5, "w": "big"}),
+            json!({"t": 2.5, "d": 0.5, "w": "world"}),
+            json!({"t": 9, "d": 0.5, "w": "later"}),
+        ]);
+        assert_eq!(lines.len(), 3);
         assert_eq!(
-            c.lyrics[0]
+            lines[0]
                 .words
                 .iter()
                 .map(|w| w.text.as_str())
                 .collect::<String>(),
             "Hello "
         );
-        assert_eq!(c.lyrics[1].words.len(), 2);
-        assert_eq!(c.lyrics[1].end, 3.0);
-        assert_eq!(c.lyrics[2].start, 9.0);
+        assert_eq!(lines[1].words.len(), 2);
+        assert_eq!(lines[1].end, 3.0);
+        assert_eq!(lines[2].start, 9.0);
     }
 
     #[test]
-    fn errors_and_garbage() {
-        assert!(Chart::from_json("[{\"error\": \"File not found\"}]").is_err());
-        assert!(Chart::from_json("{}").is_err());
-        let c =
-            Chart::from_json("[{\"type\":\"notes\",\"data\":[{\"t\":\"x\",\"s\":null}]}]").unwrap();
+    fn garbage_falls_back_to_defaults() {
+        assert!(Chart::from_json("nope").is_err());
+        let mut c = Chart::from_pack(
+            &json!({"notes": [{"t": "x", "s": null}], "chords": "no", "tuning": ["a"]}),
+        );
+        c.finish("");
         assert_eq!(c.notes.len(), 1);
         assert_eq!(c.notes[0].time, 0.0);
+        assert_eq!(c.tuning, vec![0]);
+        assert!(c.chords.is_empty());
     }
 }

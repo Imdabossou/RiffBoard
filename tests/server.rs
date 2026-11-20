@@ -1,19 +1,14 @@
-//! End-to-end tests against the real binary on the fixture library.
-//!
-//! * golden: every request in tests/golden/golden.json (recorded from the
-//!   original Python server, see tests/golden/capture.py) must produce the
-//!   same JSON from the Rust server.
-//! * public-site guarantees: the allowlist, the leaderboard checks and the
-//!   operator routes.
+//! End-to-end tests against the real binary on the fixture library: what
+//! the game reads (library, song pages, charts, audio), and the public-site
+//! guarantees (the allowlist, the leaderboard checks, the operator routes).
 
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-use futures_util::{SinkExt, StreamExt};
+use riffboard_core::chart::Chart;
 use serde_json::{Value, json};
-use tokio_tungstenite::tungstenite::Message;
 
 struct Server {
     child: Child,
@@ -118,71 +113,108 @@ async fn start(tag: &str) -> Server {
     }
 }
 
-/// Numbers compare as f64 (Python wrote `40.0`, Rust may write `40`).
-fn norm(v: &Value) -> Value {
-    match v {
-        Value::Number(n) => json!(n.as_f64().map(|f| (f * 1e9).round() / 1e9)),
-        Value::Array(a) => Value::Array(a.iter().map(norm).collect()),
-        Value::Object(o) => Value::Object(
-            o.iter()
-                .filter(|(k, _)| !["mtime", "next_cursor", "_closed"].contains(&k.as_str()))
-                .map(|(k, v)| (k.clone(), norm(v)))
-                .collect(),
-        ),
-        other => other.clone(),
-    }
-}
-
-async fn ws_messages(base: &str, path: &str) -> Vec<Value> {
-    let url = format!("{}{path}", base.replace("http", "ws"));
-    let (mut ws, _) = tokio_tungstenite::connect_async(url)
-        .await
-        .expect("ws connect");
-    let mut out = Vec::new();
-    while let Ok(Some(Ok(msg))) = tokio::time::timeout(Duration::from_secs(10), ws.next()).await {
-        let Message::Text(t) = msg else { continue };
-        let v: Value = serde_json::from_str(&t).unwrap();
-        let done = v.get("type") == Some(&json!("ready")) || v.get("error").is_some();
-        out.push(v);
-        if done {
-            break;
-        }
-    }
-    let _ = ws.close(None).await;
-    out
+async fn get_json(base: &str, path: &str) -> (u16, Value) {
+    let r = reqwest::get(format!("{base}{path}")).await.unwrap();
+    let s = r.status().as_u16();
+    (s, r.json().await.unwrap_or(Value::Null))
 }
 
 #[tokio::test]
-async fn matches_the_python_server() {
-    let srv = start("golden").await;
-    let golden: serde_json::Map<String, Value> = serde_json::from_str(
-        &std::fs::read_to_string(root().join("tests/golden/golden.json")).unwrap(),
-    )
-    .unwrap();
-    // Not comparable: the capture ran at another version.
-    let skip = ["GET /api/version"];
-    let mut failures = Vec::new();
-    for (key, expected) in &golden {
-        if skip.contains(&key.as_str()) {
-            continue;
-        }
-        let (kind, path) = key.split_once(' ').unwrap();
-        let got = if kind == "GET" {
-            let r = reqwest::get(format!("{}{path}", srv.base)).await.unwrap();
-            let status = r.status().as_u16();
-            let body: Value = r.json().await.unwrap_or(Value::Null);
-            json!({"status": status, "body": body})
-        } else {
-            json!({"messages": ws_messages(&srv.base, path).await})
-        };
-        if norm(&got) != norm(expected) {
-            failures.push(key.clone());
+async fn library_song_pages_and_charts() {
+    let srv = start("charts").await;
+    let b = &srv.base;
+    // The library: every pack, sorted by artist then title, plain rows.
+    let (s, lib) = get_json(b, "/api/library").await;
+    assert_eq!(s, 200);
+    let songs = lib["songs"].as_array().unwrap();
+    let names: Vec<&str> = songs.iter().map(|s| s["title"].as_str().unwrap()).collect();
+    assert_eq!(names, vec!["Dir Song", "Plain Bass", "Rich Song"]);
+    let mut keys: Vec<&String> = songs[0].as_object().unwrap().keys().collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        vec!["album", "artist", "duration", "filename", "title"]
+    );
+
+    for song in songs {
+        let file = song["filename"].as_str().unwrap();
+        let path = file.replace(' ', "%20");
+        let (s, page) = get_json(b, &format!("/api/song/{path}")).await;
+        assert_eq!(s, 200, "{file}");
+        let parts = page["arrangements"].as_array().unwrap();
+        assert!(!parts.is_empty(), "{file}");
+        for part in parts {
+            let i = part["index"].as_u64().unwrap();
+            let r = reqwest::get(format!("{b}/api/chart/{path}?arrangement={i}"))
+                .await
+                .unwrap();
+            assert_eq!(r.status().as_u16(), 200, "{file} [{i}]");
+            let c = Chart::from_json(&r.text().await.unwrap()).unwrap();
+            // The chart matches the song page and is playable.
+            assert_eq!(c.arrangement, part["name"].as_str().unwrap(), "{file}");
+            assert_eq!(c.arrangement_index as u64, i);
+            assert_eq!(c.title, song["title"].as_str().unwrap());
+            assert!(c.judgeable() > 0, "{file} [{i}] has notes");
+            assert!((4..=8).contains(&c.string_count));
+            // Audio (where the pack has some) is served from the pack.
+            for url in c.audio_url.iter().chain(c.stems.iter().map(|s| &s.url)) {
+                assert!(url.starts_with("/api/pack/"), "{url}");
+                let r = reqwest::get(format!("{b}{url}")).await.unwrap();
+                assert_eq!(r.status().as_u16(), 200, "{url}");
+            }
         }
     }
-    assert!(
-        failures.is_empty(),
-        "responses differ from the reference for: {failures:#?}"
-    );
+
+    // The rich pack: stems with the full mix lifted out, lyrics, timeline.
+    let rich = "Fixture%20Band/Rich%20Song.feedpak";
+    let r = reqwest::get(format!("{b}/api/chart/{rich}")).await.unwrap();
+    let c = Chart::from_json(&r.text().await.unwrap()).unwrap();
+    assert!(c.stems.len() > 1 && c.stems.iter().all(|s| s.id != "full"));
+    assert!(c.audio_url.is_some());
+    assert!(!c.lyrics.is_empty());
+    assert!(!c.beats.is_empty() && !c.sections.is_empty());
+    // Without ?arrangement= it is the part with the most notes.
+    let (_, page) = get_json(b, &format!("/api/song/{rich}")).await;
+    let most = (0..page["arrangements"].as_array().unwrap().len()).map(|i| async move {
+        let r = reqwest::get(format!("{b}/api/chart/{rich}?arrangement={i}"))
+            .await
+            .unwrap();
+        Chart::from_json(&r.text().await.unwrap())
+            .unwrap()
+            .judgeable()
+    });
+    let mut counts = Vec::new();
+    for f in most {
+        counts.push(f.await);
+    }
+    assert_eq!(c.judgeable(), *counts.iter().max().unwrap());
+
+    // Charts go out gzipped to browsers that accept it.
+    let r = reqwest::Client::new()
+        .get(format!("{b}/api/chart/{rich}"))
+        .header("accept-encoding", "gzip")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.headers()["content-encoding"], "gzip");
+    // ...but audio is never re-compressed.
+    let r = reqwest::Client::new()
+        .get(format!("{b}{}", c.stems[0].url))
+        .header("accept-encoding", "gzip")
+        .send()
+        .await
+        .unwrap();
+    assert!(r.headers().get("content-encoding").is_none());
+
+    // Unknown parts and songs.
+    for path in [
+        format!("/api/chart/{rich}?arrangement=99"),
+        "/api/chart/Fixture%20Band/Nope.feedpak".into(),
+        "/api/chart/..%2FCargo.toml".into(),
+        "/api/song/Fixture%20Band/Nope.feedpak".into(),
+    ] {
+        assert_eq!(get_json(b, &path).await.0, 404, "{path}");
+    }
 }
 
 async fn post(base: &str, path: &str, body: Value) -> (u16, Value) {
@@ -231,6 +263,11 @@ async fn only_listed_routes_are_reachable() {
         ("GET", "/api/startup-status"),
         ("GET", "/api/scan-status"),
         ("GET", "/static/v3/index.html"),
+        ("GET", "/ws/highway/Fixture%20Band/Plain%20Bass.feedpak"),
+        (
+            "GET",
+            "/api/sloppak/Fixture%20Band%2FRich%20Song.feedpak/file/stems/full.ogg",
+        ),
     ] {
         let r = c
             .request(method.parse().unwrap(), format!("{}{path}", srv.base))
@@ -288,7 +325,7 @@ async fn only_listed_routes_are_reachable() {
     // Audio supports range requests (seeking).
     let r = c
         .get(format!(
-            "{}/api/sloppak/Fixture%20Band%2FRich%20Song.feedpak/file/stems/full.ogg",
+            "{}/api/pack/Fixture%20Band/Rich%20Song.feedpak/file/stems/full.ogg",
             srv.base
         ))
         .header("Range", "bytes=0-3")
@@ -398,33 +435,6 @@ async fn admin_routes_need_the_token() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(String::from_utf8_lossy(&out.stdout).contains("No scores yet"));
-}
-
-#[tokio::test]
-async fn websocket_stays_open_after_ready() {
-    let srv = start("ws").await;
-    let url = format!(
-        "{}/ws/highway/Fixture%20Band/Plain%20Bass.feedpak",
-        srv.base.replace("http", "ws")
-    );
-    let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
-    let mut saw_ready = false;
-    while let Some(Ok(Message::Text(t))) = ws.next().await {
-        if t.contains("\"ready\"") {
-            saw_ready = true;
-            break;
-        }
-    }
-    assert!(saw_ready);
-    ws.send(Message::Text(r#"{"action":"change_arrangement"}"#.into()))
-        .await
-        .unwrap();
-    assert!(
-        tokio::time::timeout(Duration::from_millis(300), ws.next())
-            .await
-            .is_err(),
-        "socket should idle, not close"
-    );
 }
 
 #[tokio::test]

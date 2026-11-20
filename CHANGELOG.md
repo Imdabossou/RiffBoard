@@ -3,7 +3,7 @@
 All notable changes to RiffBoard are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/). Upstream fee[dB]ack's history up to
-the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
+the fork is in [its repository](https://github.com/got-feedback/feedBack).
 
 ## [Unreleased]
 
@@ -19,13 +19,14 @@ the fork is in [docs/upstream-changelog.md](docs/upstream-changelog.md).
 - Lyrics show in the top-left corner (current line with sung words lit, and the next line). The score moved to the top-right.
 - A look of its own: the band's accent colour (RiffBoard's cyan and violet when unbranded) lights the stage: the fret window and its edges, the fret wires, bar lines, the horizon haze, the navigator and the sung lyrics. Notes are glossy and bevelled and glow as they arrive, sustains are shimmering ribbons, a ringing string glows and blurs as it vibrates, and hits throw sparks.
 - The band's artwork (the site's hero image, or RiffBoard's own when unbranded) sits blurred and darkened behind the highway, which fades into it. It can be turned off in Settings.
-- Held notes stay on the fretboard, lit, until their sustain ends; notes that pass unplayed fade out at the line.
 - Score runs may be paused (they still can't skip or slow down). Practice runs can restart and jump to any section from the pause menu.
 - The leaderboard rules (score formula and run checks) now live in `crates/core`, used by both the server and the game.
+- One chart model for the server and the game (`crates/core`): the server reads a pack straight into it and the game loads it with one compressed request (`GET /api/chart/<song>`), instead of rebuilding upstream's highway messages and streaming them over a WebSocket. A chart is about 10 times smaller on the wire. The library and song endpoints return only what the site shows, and pack files are served from `/api/pack/`.
 
 ### Removed
 
 - The inherited fee[dB]ack frontend (about 58,000 lines of JavaScript), its plugins (3D highway, note detection, tuner, input setup) and the endpoints only they used: `/api/settings`, `/api/tunings`, `/api/plugins*`, `/api/library/stats|albums|artists|genres|tuning-names|providers*`, `/api/work/*`, `/api/startup-status*`, `/api/scan-status`. This also removes the code behind the open CodeQL alerts in the old highway.
+- Upstream's highway WebSocket (`/ws/highway/`) and its message format (tone changes, key tracks, scale degrees, naming modes, drum and notation flags), the library's filters, facets and tuning names, and the test suite that replayed the original Python server's responses.
 - Not yet carried over from the old player: loops, playback speed, difficulty levels and the tuner.
 
 ### Security

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Build a small, deterministic feedpak library that exercises the server.
 
-Used to record the reference ("golden") responses from the original Python
-server and to test the Rust server against them. Every feature the player
-reads from a pack appears at least once: several arrangements (lead + bass),
+Used by tests/server.rs. Every feature a pack can carry appears at least once
+(including ones RiffBoard ignores, which must not break loading): several arrangements (lead + bass),
 chords + templates + hand shapes, anchors, bends/slides/techniques, a
 two-level difficulty ladder, beats/sections/tempos/time signatures via
 song_timeline.json, lyrics, a full mix + instrument stems, tone changes, a
