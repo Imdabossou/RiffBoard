@@ -7,6 +7,8 @@ the fork is in [its repository](https://github.com/got-feedback/feedBack).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-25
+
 ### Changed
 
 - **New game engine.** The player is now a Rust game compiled to WebAssembly (about 110 KB gzipped), with its own WebGL2 renderer. The highway is drawn in four batched draw calls a frame with nothing allocated per frame, and the song clock comes from the audio output, so playback is smooth: in testing, no dropped frames at 60 Hz even with the CPU slowed 20 times.
