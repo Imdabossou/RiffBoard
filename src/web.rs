@@ -173,6 +173,9 @@ fn no_cache(mut r: Response) -> Response {
 
 // ── Router ───────────────────────────────────────────────────────────────────
 
+/// Largest request body any route accepts, in bytes.
+pub const BODY_LIMIT: usize = 16 * 1024;
+
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(index))
@@ -205,6 +208,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/admin/names/ban", post(admin_ban))
         .route("/api/admin/names/unban", post(admin_unban))
         .route("/api/admin/scores/wipe", post(admin_wipe))
+        // Every request body is a few small JSON fields; cap them well below axum's 2 MB default.
+        .layer(axum::extract::DefaultBodyLimit::max(BODY_LIMIT))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             crate::guard::middleware,

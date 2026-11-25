@@ -32,8 +32,16 @@ const DEFAULTS = {
   quality: 'auto', micDeviceId: '', name: '', backdrop: true,
 };
 
+// Saved settings are checked against the defaults' types, so nothing odd in storage reaches the page.
 function loadSettings() {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('rb-settings') || '{}') }; } catch { return { ...DEFAULTS }; }
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('rb-settings') || '{}') || {}; } catch { /* unreadable: use defaults */ }
+  const out = { ...DEFAULTS };
+  for (const [k, d] of Object.entries(DEFAULTS)) {
+    const v = saved[k];
+    if (typeof d === 'number' ? Number.isFinite(v) : typeof v === typeof d) out[k] = v;
+  }
+  return out;
 }
 function saveSettings(s) {
   try { localStorage.setItem('rb-settings', JSON.stringify(s)); } catch { /* storage blocked */ }
@@ -433,7 +441,7 @@ async function boardsPage() {
 async function settingsPage() {
   const range = (id, label, min, max, step, val, fmt, help) => `
     <div class="setting card"><label for="${id}">${label}</label>
-      <div class="row"><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><output for="${id}">${fmt(val)}</output></div>
+      <div class="row"><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${esc(val)}"><output for="${id}">${esc(fmt(val))}</output></div>
       ${help ? `<span class="dim small">${help}</span>` : ''}</div>`;
   view.innerHTML = `<div class="wrap"><div class="settings">
     <h1>Settings</h1>

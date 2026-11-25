@@ -350,6 +350,9 @@ async fn leaderboard_checks() {
     assert_eq!(post(b, "/api/scores", body.clone()).await.0, 422);
     assert_eq!(post(b, "/api/scores", body).await.0, 409);
     // Bad input.
+    let big = json!({"filename": song, "pad": "x".repeat(16 * 1024)});
+    assert_eq!(post(b, "/api/runs", big.clone()).await.0, 413);
+    assert_eq!(post(b, "/api/scores", big).await.0, 413);
     assert_eq!(
         post(b, "/api/runs", json!({"filename": "nope.feedpak"}))
             .await
