@@ -7,6 +7,13 @@ the fork is in [its repository](https://github.com/got-feedback/feedBack).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-26
+
+### Security
+
+- The API refuses request bodies over 16 KB (the limit was 2 MB); every request it takes is a few small JSON fields.
+- Settings saved in the browser are checked against their expected types when loaded, and the settings page escapes the values it shows.
+
 ## [0.4.0] - 2026-11-25
 
 ### Changed
